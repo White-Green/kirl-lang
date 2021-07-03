@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::num::ParseFloatError;
 use std::ops::Range;
 use std::str::FromStr;
@@ -5,32 +7,7 @@ use std::str::FromStr;
 use parser::enum_index;
 use parser::enum_index_derive::*;
 use tokenizer::*;
-
-#[derive(Clone, Default, Copy, Debug, PartialEq)]
-pub struct CharacterPosition {
-    line: usize,
-    column: usize,
-}
-
-impl CharacterPosition {
-    pub fn zero() -> Self {
-        Self::default()
-    }
-
-    pub fn new(line: usize, column: usize) -> Self {
-        CharacterPosition { line, column }
-    }
-
-    pub fn next(self) -> Self {
-        let CharacterPosition { line, column } = self;
-        CharacterPosition { line, column: column + 1 }
-    }
-
-    pub fn next_line(self) -> Self {
-        let CharacterPosition { line, .. } = self;
-        CharacterPosition { line: line + 1, column: 0 }
-    }
-}
+use crate::CharacterPosition;
 
 #[derive(Debug, PartialEq, EnumIndex)]
 pub enum Token {
@@ -66,6 +43,8 @@ pub enum Token {
     FloatImmediate(Range<CharacterPosition>, f64),
     /// .
     Dot(Range<CharacterPosition>),
+    /// #
+    Sharp(Range<CharacterPosition>),
     /// ::
     DoubleColon(Range<CharacterPosition>),
     /// :
@@ -126,6 +105,21 @@ pub enum TokenizeError {
     UnknownCharacter { character: char, position: CharacterPosition },
 }
 
+impl Display for TokenizeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl Error for TokenizeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            TokenizeError::FloatParseError { error, .. } => Some(error),
+            _ => None
+        }
+    }
+}
+
 fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)> {
     let (tokenizer, _warning) = DFATokenizer::<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)>::builder()
         .pattern("//.+\n", |_, _| Ok(None))
@@ -147,6 +141,7 @@ fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (Charac
         .pattern("0b[01_]*[01]|0o[0-7_]*[0-7]|0d[0-9_]*[0-9]|0x[0-9a-fA-F_]*[0-9a-fA-F]|[0-9]|[0-9][0-9_]*[0-9]", |s, v| parse_integer(s).ok_or_else(|| TokenizeError::IntegerParseError { raw: s.to_string(), position: v.first().unwrap().0..v.last().unwrap().0.next() }).map(|i| Some(Token::IntegerImmediate(v.first().unwrap().0..v.last().unwrap().0.next(), i))))
         .pattern("([0-9][0-9_]*[0-9]|[0-9]|([0-9][0-9_]*)?\\.[0-9_]*[0-9])([eE][\\+\\-]?[0-9_]*[0-9])?", |s, v| f64::from_str(&s.replace("_", "")).map(|f| Some(Token::FloatImmediate(v.first().unwrap().0..v.last().unwrap().0.next(), f))).map_err(|e| TokenizeError::FloatParseError { raw: s.to_string(), position: v.first().unwrap().0..v.last().unwrap().0.next(), error: e }))
         .pattern("\\.", |_, v| Ok(Some(Token::Dot(v.first().unwrap().0..v.last().unwrap().0.next()))))
+        .pattern("#", |_, v| Ok(Some(Token::Sharp(v.first().unwrap().0..v.last().unwrap().0.next()))))
         .pattern("::", |_, v| Ok(Some(Token::DoubleColon(v.first().unwrap().0..v.last().unwrap().0.next()))))
         .pattern(":", |_, v| Ok(Some(Token::Colon(v.first().unwrap().0..v.last().unwrap().0.next()))))
         .pattern(";", |_, v| Ok(Some(Token::Semicolon(v.first().unwrap().0..v.last().unwrap().0.next()))))
@@ -218,6 +213,7 @@ fn parse_string_literal(s: &str) -> Option<String> {
             _ => unreachable!("事前にとーくないざの正規表現で確認してるのであんりーちゃぶる")
         }
     }
+    result.shrink_to_fit();
     Some(result)
 }
 
@@ -261,7 +257,7 @@ is ::
 [ ]
 { }
 -> =>
-.";
+. #";
         println!("{:?}", TEXT);
         let vec = tokenize(TEXT);
         println!("{:?}", vec);
@@ -340,6 +336,8 @@ is ::
             Ok(Some(Token::MatchArrow(new(17, 3)..new(17, 5)))),
             Ok(None),
             Ok(Some(Token::Dot(new(18, 0)..new(18, 1)))),
+            Ok(None),
+            Ok(Some(Token::Sharp(new(18, 2)..new(18, 3)))),
         ]);
         assert_eq!(tokenize("a"), vec![Ok(Some(Token::Identifier(new(0, 0)..new(0, 1), "a".to_string())))]);
         assert_eq!(tokenize("abc_123"), vec![Ok(Some(Token::Identifier(new(0, 0)..new(0, 7), "abc_123".to_string())))]);
@@ -347,7 +345,7 @@ is ::
         assert_ne!(tokenize("0_abc_123"), vec![Ok(Some(Token::Identifier(new(0, 0)..new(0, 9), "0_abc_123".to_string())))]);
 
         assert_eq!(tokenize(r##""abcd1234_*`{}-^=~|<>?_,./""##), vec![Ok(Some(Token::StringImmediate(new(0, 0)..new(0, 27), "abcd1234_*`{}-^=~|<>?_,./".to_string())))]);
-        assert_eq!(tokenize(r##""\\ \" \n \t \x41 \u{beef}""##), vec![Ok(Some(Token::StringImmediate(new(0, 0)..new(0, 27), "\\ \" \n \t \x41 \u{beef}".to_string())))]);
+        assert_eq!(tokenize(r#""\\ \" \n \t \x41 \u{beef}""#), vec![Ok(Some(Token::StringImmediate(new(0, 0)..new(0, 27), "\\ \" \n \t \x41 \u{beef}".to_string())))]);
 
         assert_eq!(tokenize("0"), vec![Ok(Some(Token::IntegerImmediate(new(0, 0)..new(0, 1), 0)))]);
         assert_eq!(tokenize("0b0"), vec![Ok(Some(Token::IntegerImmediate(new(0, 0)..new(0, 3), 0)))]);
@@ -366,10 +364,10 @@ is ::
         assert_eq!(tokenize("0d123"), vec![Ok(Some(Token::IntegerImmediate(new(0, 0)..new(0, 5), 123)))]);
         assert_eq!(tokenize("0x123"), vec![Ok(Some(Token::IntegerImmediate(new(0, 0)..new(0, 5), 0x123)))]);
         assert_eq!(tokenize("9223372036854775808"), vec![Err(TokenizeError::IntegerParseError { raw: "9223372036854775808".to_string(), position: new(0, 0)..new(0, 19) })]);
-        assert_eq!(tokenize("0b1____0000_0000__0000_0000___0000_0000__0000_0000____0000_0000__0000_0000___0000_0000__0000_0000"), vec![Err(TokenizeError::IntegerParseError { raw: "0b1____0000_0000__0000_0000___0000_0000__0000_0000____0000_0000__0000_0000___0000_0000__0000_0000".to_string(), position: new(0, 0)..new(0, 97) })]);
-        assert_eq!(tokenize("0o2000000000000000000000"), vec![Err(TokenizeError::IntegerParseError { raw: "0o2000000000000000000000".to_string(), position: new(0, 0)..new(0, 24) })]);
+        assert_eq!(tokenize("0b1000_0000__0000_0000___0000_0000__0000_0000____0000_0000__0000_0000___0000_0000__0000_0000"), vec![Err(TokenizeError::IntegerParseError { raw: "0b1000_0000__0000_0000___0000_0000__0000_0000____0000_0000__0000_0000___0000_0000__0000_0000".to_string(), position: new(0, 0)..new(0, 92) })]);
+        assert_eq!(tokenize("0o1000000000000000000000"), vec![Err(TokenizeError::IntegerParseError { raw: "0o1000000000000000000000".to_string(), position: new(0, 0)..new(0, 24) })]);
         assert_eq!(tokenize("0d9223372036854775808"), vec![Err(TokenizeError::IntegerParseError { raw: "0d9223372036854775808".to_string(), position: new(0, 0)..new(0, 21) })]);
-        assert_eq!(tokenize("0x1_0000_0000_0000_0000"), vec![Err(TokenizeError::IntegerParseError { raw: "0x1_0000_0000_0000_0000".to_string(), position: new(0, 0)..new(0, 23) })]);
+        assert_eq!(tokenize("0x8000_0000_0000_0000"), vec![Err(TokenizeError::IntegerParseError { raw: "0x8000_0000_0000_0000".to_string(), position: new(0, 0)..new(0, 21) })]);
 
         assert_eq!(tokenize(".0"), vec![Ok(Some(Token::FloatImmediate(new(0, 0)..new(0, 2), 0.)))]);
         assert_eq!(tokenize(".1e1"), vec![Ok(Some(Token::FloatImmediate(new(0, 0)..new(0, 4), f64::from_str(".1e1").unwrap())))]);
