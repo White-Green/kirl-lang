@@ -1,5 +1,5 @@
-mod parser;
-mod tokenizer;
+pub mod parser;
+pub mod tokenizer;
 
 #[derive(Clone, Default, Copy, Debug, PartialEq)]
 pub struct CharacterPosition {

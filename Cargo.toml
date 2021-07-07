@@ -1,4 +1,5 @@
 [workspace]
 members = [
-  "kirl_parser",
+    "kirl_parser",
+    "tools/parser_generator",
 ]
