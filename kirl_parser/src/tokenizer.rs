@@ -132,7 +132,7 @@ impl Error for TokenizeError {
 
 fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)> {
     let (tokenizer, _warning) = DFATokenizer::<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)>::builder()
-        .pattern("//.+\n", |_, _| Ok(None))
+        .pattern("//.+", |_, _| Ok(None))
         .pattern("/\\*(\\*[^/]|[^\\*])*\\*/", |_, _| Ok(None))
         .pattern("\\s", |_, _| Ok(None))
         .pattern("import", |_, v| Ok(Some(Token::Import(v.first().unwrap().0..v.last().unwrap().0.next()))))
@@ -275,7 +275,10 @@ return ::
 . #
 , !=
 ! break
-continue";
+continue // Comment test
+/* Comment
+test2 */
+";
         println!("{:?}", TEXT);
         let vec = tokenize(TEXT);
         println!("{:?}", vec);
@@ -366,6 +369,11 @@ continue";
             Ok(Some(Token::Break(new(20, 2)..new(20, 7)))),
             Ok(None),
             Ok(Some(Token::Continue(new(21, 0)..new(21, 8)))),
+            Ok(None),
+            Ok(None),
+            Ok(None),
+            Ok(None),
+            Ok(None)
         ]);
         assert_eq!(tokenize("a"), vec![Ok(Some(Token::Identifier((new(0, 0)..new(0, 1), "a".to_string()))))]);
         assert_eq!(tokenize("abc_123"), vec![Ok(Some(Token::Identifier((new(0, 0)..new(0, 7), "abc_123".to_string()))))]);
