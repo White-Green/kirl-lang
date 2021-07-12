@@ -1,4 +1,3 @@
-
 use std::mem;
 use std::ops::Range;
 
@@ -8,8 +7,10 @@ use parser::enum_index_derive::*;
 use parser::Symbol::{NonTerminal, Terminal};
 
 use crate::CharacterPosition;
-
 use crate::tokenizer::Token;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Default)]
 pub struct Statement {
@@ -174,6 +175,7 @@ pub enum ExpressionItem {
     CallFunction(Box<Expression>, Option<Path>, Vec<Expression>),
     ConstructTuple(Vec<Expression>),
     ConstructArray(Vec<Expression>),
+    ConstructStruct(ConstructStruct),
     Block(Block),
     Neg(Box<Expression>),
     Not(Box<Expression>),
@@ -364,7 +366,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
         .rule(Rule::new(Symbol::Type(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default()))],
                         |list| if let [NonTerminal(Symbol::FullPath((symbol_position, Path { position, path })))] = list {
                             Symbol::Type((mem::take(symbol_position), Type::NamedType(NamedType {
-                                position: mem::take(position),
+                                position: position.clone(),
                                 path: mem::take(path),
                                 generics_arguments: Vec::new(),
                             })))
@@ -471,7 +473,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                                 list.push((name.clone(), mem::take(item_type)));
                                 mem::take(list)
                             }))
-                        } else { unreachable!() }))
+                        } else { unreachable!() }))// TODO:<ConstructStruct>::=<StructName> ...のStructNameを展開してみる
         .rule(Rule::new(Symbol::ConstructStruct(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::ConstructStructItems(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
                         |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::ConstructStructItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::ConstructStruct((*start..*end, ConstructStruct { name: mem::take(name), items: mem::take(items) }))
@@ -555,7 +557,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::ImportStatement(Default::default()))],
                         |list| if let [NonTerminal(Symbol::ImportStatement((position, path)))] = list {
-                            Symbol::Statement((position.clone(), Statement { position: mem::take(position), statement: StatementItem::Import(mem::take(path)) }))
+                            Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::Import(mem::take(path)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
                         |list| if let [NonTerminal(Symbol::Expression((Range { start, .. }, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
@@ -591,15 +593,15 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::ForStatement(Default::default()))],
                         |list| if let [NonTerminal(Symbol::ForStatement((position, for_statement)))] = list {
-                            Symbol::Statement((position.clone(), Statement { position: mem::take(position), statement: StatementItem::For(mem::take(for_statement)) }))
+                            Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::For(mem::take(for_statement)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::WhileStatement(Default::default()))],
                         |list| if let [NonTerminal(Symbol::WhileStatement((position, while_statement)))] = list {
-                            Symbol::Statement((position.clone(), Statement { position: mem::take(position), statement: StatementItem::While(mem::take(while_statement)) }))
+                            Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::While(mem::take(while_statement)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StatementList(Default::default()), &[NonTerminal(Symbol::Statement(Default::default()))],
                         |list| if let [NonTerminal(Symbol::Statement((position, statement)))] = list {
-                            Symbol::StatementList((mem::take(position), vec![mem::take(statement)]))
+                            Symbol::StatementList((position.clone(), vec![mem::take(statement)]))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StatementList(Default::default()), &[NonTerminal(Symbol::StatementList(Default::default())), NonTerminal(Symbol::Statement(Default::default()))],
                         |list| if let [NonTerminal(Symbol::StatementList((Range { start, .. }, list))), NonTerminal(Symbol::Statement((Range { end, .. }, statement)))] = list {
@@ -714,11 +716,15 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Block(Default::default()))],
                         |list| if let [NonTerminal(Symbol::Block((position, block)))] = list {
-                            Symbol::Expression8((position.clone(), Expression { position: mem::take(position), expression: ExpressionItem::Block(mem::take(block)) }))
+                            Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::Block(mem::take(block)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default()))],
                         |list| if let [NonTerminal(Symbol::FullPath((position, path)))] = list {
-                            Symbol::Expression8((position.clone(), Expression { position: mem::take(position), expression: ExpressionItem::AccessVariable(mem::take(path)) }))
+                            Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(mem::take(path)) }))
+                        } else { unreachable!() }))
+        .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::ConstructStruct(Default::default()))],
+                        |list| if let [NonTerminal(Symbol::ConstructStruct((position, item)))] = list {
+                            Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::ConstructStruct(mem::take(item)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression7(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default()))],
                         |list| if let [NonTerminal(Symbol::Expression8(item))] = list {
@@ -1136,17 +1142,4 @@ fn get_syntax() -> Syntax<Symbol, Token> {
 
 pub fn get_parser() -> LR1Parser<Symbol, Token> {
     LR1Parser::new(get_syntax()).0
-}
-
-#[cfg(test)]
-mod tests {
-    use parser::LR1Parser;
-
-    use crate::parser::{get_syntax};
-
-    #[test]
-    fn test_parse() {
-        let (_parser, warning) = LR1Parser::new(get_syntax());
-        assert_eq!(warning.len(), 0, "{}", warning.into_iter().map(|w| format!("{:?}", w)).collect::<Vec<_>>().join("\n"));
-    }
 }
