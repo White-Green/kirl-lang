@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 use std::mem;
 use std::ops::Range;
 
@@ -8,7 +8,7 @@ use parser::enum_index_derive::*;
 use parser::Symbol::{NonTerminal, Terminal};
 
 use crate::CharacterPosition;
-use crate::parser::Symbol::ValidKirlCode;
+
 use crate::tokenizer::Token;
 
 #[derive(Debug, Default)]
@@ -312,7 +312,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
     Syntax::builder()
         .rule(Rule::new(Symbol::ValidKirlCode(Default::default()), &[],
                         |list| if let [] = list {
-                            Symbol::ValidKirlCode((Default::default()))
+                            Symbol::ValidKirlCode(Default::default())
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ValidKirlCode(Default::default()), &[NonTerminal(Symbol::ValidKirlCode(Default::default())), NonTerminal(Symbol::Statement(Default::default()))],
                         |list| match list {
@@ -354,7 +354,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Type((position.clone(), Type::Unreachable(position.clone())))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
-                        |list| if let [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::NamedType(NamedType {
                                 position: *start..*end,
                                 path: vec![name.clone()],
@@ -370,7 +370,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::FullPath((Range { start, .. }, Path { path, .. }))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::FullPath((Range { start, .. }, Path { path, .. }))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::NamedType(NamedType {
                                 position: *start..*end,
                                 path: mem::take(path),
@@ -378,27 +378,27 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::SquareBracketOpen(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::SquareBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::SquareBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Type((_, inner_type))), Terminal(Token::SquareBracketClose(Range { end, .. }))] = list {
+                        |list| if let [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::Type((_, inner_type))), Terminal(Token::SquareBracketClose(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::Array(*start..*end, Box::new(mem::take(inner_type)))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Type((_, inner_type))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Type((_, inner_type))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, mem::take(inner_type)))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Type((_, inner_type))), _, Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Type((_, inner_type))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::Tuple(*start..*end, vec![mem::take(inner_type)])))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::Tuple(*start..*end, mem::take(types))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::Sharp(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::StructDefinitionItems(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Sharp((Range { start, .. }))), _, NonTerminal(Symbol::StructDefinitionItems((_, members))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Sharp(Range { start, .. })), _, NonTerminal(Symbol::StructDefinitionItems((_, members))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::AnonymousStruct(AnonymousStructType { position: *start..*end, members: mem::take(members) })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] = list {
                             Symbol::Type((*start..*end, Type::Function(FunctionType {
                                 position: *start..*end,
                                 argument: Vec::new(),
@@ -406,7 +406,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Type((_, argument_type))), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Type((_, argument_type))), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] = list {
                             Symbol::Type((*start..*end, Type::Function(FunctionType {
                                 position: *start..*end,
                                 argument: vec![mem::take(argument_type)],
@@ -414,7 +414,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::CommaSeparatedTypes((_, arguments))), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedTypes((_, arguments))), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] = list {
                             Symbol::Type((*start..*end, Type::Function(FunctionType {
                                 position: *start..*end,
                                 argument: mem::take(arguments),
@@ -422,7 +422,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Type(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::OrSeparatedTypes(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::OrSeparatedTypes((_, types))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::OrSeparatedTypes((_, types))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Type((*start..*end, Type::Or(*start..*end, mem::take(types))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FullPath(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::Identifier(Default::default()))],
@@ -473,15 +473,15 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ConstructStruct(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::ConstructStructItems(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::ConstructStructItems((_, items))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::ConstructStructItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::ConstructStruct((*start..*end, ConstructStruct { name: mem::take(name), items: mem::take(items) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ConstructStruct(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::ConstructStructItems(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::ConstructStructItems((_, items))), _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::ConstructStructItems((_, items))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::ConstructStruct((*start..*end, ConstructStruct { name: mem::take(name), items: mem::take(items) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ConstructStruct(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::ConstructStruct((*start..*end, ConstructStruct { name: mem::take(name), items: Vec::new() }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Identifier(Default::default()))],
@@ -489,7 +489,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::StructName((position.clone(), StructName::Named(NamedType { position: position.clone(), path: vec![name.clone()], generics_arguments: Vec::new() })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
-                        |list| if let [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
                             Symbol::StructName((*start..*end, StructName::Named(NamedType { position: *start..*end, path: vec![name.clone()], generics_arguments: mem::take(types) })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructName(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default()))],
@@ -497,7 +497,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::StructName((position.clone(), StructName::Named(NamedType { position: position.clone(), path: mem::take(&mut path.path), generics_arguments: Vec::new() })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructName(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
                             Symbol::StructName((*start..*end, StructName::Named(NamedType { position: *start..*end, path: mem::take(&mut path.path), generics_arguments: mem::take(types) })))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Sharp(Default::default()))],
@@ -505,19 +505,19 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::StructName((position.clone(), StructName::Anonymous))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructDefinition(Default::default()), &[Terminal(Token::Struct(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Struct((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Struct(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::StructDefinition((*start..*end, Struct { name: name.clone(), generics_arguments: Vec::new(), members: Vec::new() }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructDefinition(Default::default()), &[Terminal(Token::Struct(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Struct((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, types))), _, _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Struct(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, types))), _, _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::StructDefinition((*start..*end, Struct { name: name.clone(), generics_arguments: mem::take(types), members: Vec::new() }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructDefinition(Default::default()), &[Terminal(Token::Struct(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::StructDefinitionItems(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Struct((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::StructDefinitionItems((_, items))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Struct(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::StructDefinitionItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::StructDefinition((*start..*end, Struct { name: name.clone(), generics_arguments: Vec::new(), members: mem::take(items) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructDefinition(Default::default()), &[Terminal(Token::Struct(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::StructDefinitionItems(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Struct((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, types))), _, _, NonTerminal(Symbol::StructDefinitionItems((_, items))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Struct(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, types))), _, _, NonTerminal(Symbol::StructDefinitionItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::StructDefinition((*start..*end, Struct { name: name.clone(), generics_arguments: mem::take(types), members: mem::take(items) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ConstructStructItems(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::Colon(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
@@ -546,11 +546,11 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::LetBinding(Default::default()), &[Terminal(Token::Let(Default::default())), NonTerminal(Symbol::Pattern(Default::default())), Terminal(Token::Assign(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
-                        |list| if let [Terminal(Token::Let((Range { start, .. }))), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Let(Range { start, .. })), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
                             Symbol::LetBinding((*start..*end, LetBinding { position: *start..*end, pattern: mem::take(pattern), type_hint: None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::LetBinding(Default::default()), &[Terminal(Token::Let(Default::default())), NonTerminal(Symbol::Pattern(Default::default())), Terminal(Token::Colon(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Assign(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
-                        |list| if let [Terminal(Token::Let((Range { start, .. }))), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Type((_, type_hint))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Let(Range { start, .. })), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Type((_, type_hint))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
                             Symbol::LetBinding((*start..*end, LetBinding { position: *start..*end, pattern: mem::take(pattern), type_hint: Some(mem::take(type_hint)), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::ImportStatement(Default::default()))],
@@ -558,35 +558,35 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Statement((position.clone(), Statement { position: mem::take(position), statement: StatementItem::Import(mem::take(path)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression((Range { start, .. }, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression((Range { start, .. }, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Expression(mem::take(expression)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::LetBinding(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::LetBinding((Range { start, .. }, let_binding))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::LetBinding((Range { start, .. }, let_binding))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::LetBinding(mem::take(let_binding)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[Terminal(Token::Return(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Return((Range { start, .. }))), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Return(Range { start, .. })), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Return(Some(mem::take(expression))) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[Terminal(Token::Return(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Return((Range { start, .. }))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Return(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Return(None) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[Terminal(Token::Continue(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Continue((Range { start, .. }))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Continue(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Continue(None) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[Terminal(Token::Continue(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Continue((Range { start, .. }))), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Continue(Range { start, .. })), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Continue(Some(label.clone())) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[Terminal(Token::Break(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Break((Range { start, .. }))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Break(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Break(None) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[Terminal(Token::Break(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Break((Range { start, .. }))), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Break(Range { start, .. })), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Break(Some(label.clone())) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Statement(Default::default()), &[NonTerminal(Symbol::ForStatement(Default::default()))],
@@ -609,7 +609,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Block(Default::default()), &[Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::StatementList(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::WaveBracketOpen((Range { start, .. }))), NonTerminal(Symbol::StatementList((_, list))), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::WaveBracketOpen(Range { start, .. })), NonTerminal(Symbol::StatementList((_, list))), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Block((*start..*end, Block {
                                 position: *start..*end,
                                 statements: mem::take(list),
@@ -617,7 +617,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Block(Default::default()), &[Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::StatementList(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::WaveBracketOpen((Range { start, .. }))), NonTerminal(Symbol::StatementList((_, list))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::WaveBracketOpen(Range { start, .. })), NonTerminal(Symbol::StatementList((_, list))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Block((*start..*end, Block {
                                 position: *start..*end,
                                 statements: mem::take(list),
@@ -625,7 +625,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Block(Default::default()), &[Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::WaveBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::WaveBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Block((*start..*end, Block {
                                 position: *start..*end,
                                 statements: Vec::new(),
@@ -633,7 +633,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Block(Default::default()), &[Terminal(Token::WaveBracketOpen(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::WaveBracketOpen((Range { start, .. }))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::WaveBracketOpen(Range { start, .. })), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Block((*start..*end, Block {
                                 position: *start..*end,
                                 statements: Vec::new(),
@@ -657,19 +657,19 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::FloatImmediate(*value) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::Dot(Default::default())), NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), Some(mem::take(path)), Vec::new()) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), None, Vec::new()) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::Dot(Default::default())), NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), Some(mem::take(path)), vec![mem::take(argument)]) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), None, vec![mem::take(argument)]) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::Dot(Default::default())), Terminal(Token::Identifier(Default::default()))],
@@ -677,39 +677,39 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::AccessMember(Box::new(mem::take(expression)), member.clone()) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::Dot(Default::default())), NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedExpressions(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), Some(mem::take(path)), mem::take(arguments)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedExpressions(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), None, mem::take(arguments)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedExpressions(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(mem::take(expressions)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::SquareBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedExpressions(Default::default())), Terminal(Token::SquareBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::SquareBracketOpen((Range { start, .. }))), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::SquareBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::SquareBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(mem::take(expressions)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Expression((_, item))), _, Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(vec![mem::take(item)]) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::SquareBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::SquareBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::SquareBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Expression((_, item))), Terminal(Token::SquareBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), Terminal(Token::SquareBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(vec![mem::take(item)]) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(Vec::new()) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::SquareBracketOpen(Default::default())), Terminal(Token::SquareBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::SquareBracketOpen((Range { start, .. }))), Terminal(Token::SquareBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::SquareBracketOpen(Range { start, .. })), Terminal(Token::SquareBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(Vec::new()) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::RoundBracketOpen((Range { start, .. }))), NonTerminal(Symbol::Expression((_, item))), Terminal(Token::RoundBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, mem::take(item)))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Block(Default::default()))],
@@ -725,11 +725,11 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Expression7(mem::take(item))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression7(Default::default()), &[Terminal(Token::Sub(Default::default())), NonTerminal(Symbol::Expression7(Default::default()))],
-                        |list| if let [Terminal(Token::Sub((Range { start, .. }))), NonTerminal(Symbol::Expression7((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Sub(Range { start, .. })), NonTerminal(Symbol::Expression7((Range { end, .. }, expression)))] = list {
                             Symbol::Expression7((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Neg(Box::new(mem::take(expression))) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression7(Default::default()), &[Terminal(Token::Not(Default::default())), NonTerminal(Symbol::Expression7(Default::default()))],
-                        |list| if let [Terminal(Token::Not((Range { start, .. }))), NonTerminal(Symbol::Expression7((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Not(Range { start, .. })), NonTerminal(Symbol::Expression7((Range { end, .. }, expression)))] = list {
                             Symbol::Expression7((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Not(Box::new(mem::take(expression))) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression6(Default::default()), &[NonTerminal(Symbol::Expression7(Default::default()))],
@@ -833,43 +833,43 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Expression((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::Match(mem::take(expression)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ClosureExpression(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Colon(Default::default())), NonTerminal(Symbol::ClosureArguments(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), _, NonTerminal(Symbol::ClosureArguments((_, arguments))), _, _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), _, NonTerminal(Symbol::ClosureArguments((_, arguments))), _, _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
                             Symbol::ClosureExpression((*start..*end, Closure { position: *start..*end, arguments: mem::take(arguments), expression: Box::new(mem::take(expression)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ClosureExpression(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Colon(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), _, _, _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), _, _, _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
                             Symbol::ClosureExpression((*start..*end, Closure { position: *start..*end, arguments: Vec::new(), expression: Box::new(mem::take(expression)) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::IfExpression(Default::default()), &[Terminal(Token::If(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::If((Range { start, .. }))), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
+                        |list| if let [Terminal(Token::If(Range { start, .. })), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
                             Symbol::IfExpression((*start..*end, If { position: *start..*end, condition: Box::new(Condition::BoolExpression(mem::take(condition))), then: Box::new(Expression { position: block.position.clone(), expression: ExpressionItem::Block(mem::take(block)) }), other: None }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::IfExpression(Default::default()), &[Terminal(Token::If(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default())), Terminal(Token::Else(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::If((Range { start, .. }))), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::Block((Range { end, .. }, other)))] = list {
+                        |list| if let [Terminal(Token::If(Range { start, .. })), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::Block((Range { end, .. }, other)))] = list {
                             Symbol::IfExpression((*start..*end, If { position: *start..*end, condition: Box::new(Condition::BoolExpression(mem::take(condition))), then: Box::new(Expression { position: then.position.clone(), expression: ExpressionItem::Block(mem::take(then)) }), other: Some(Box::new(Expression { position: other.position.clone(), expression: ExpressionItem::Block(mem::take(other)) })) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::IfExpression(Default::default()), &[Terminal(Token::If(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default())), Terminal(Token::Else(Default::default())), NonTerminal(Symbol::IfExpression(Default::default()))],
-                        |list| if let [Terminal(Token::If((Range { start, .. }))), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::IfExpression((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::If(Range { start, .. })), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::IfExpression((Range { end, .. }, expression)))] = list {
                             Symbol::IfExpression((*start..*end, If { position: *start..*end, condition: Box::new(Condition::BoolExpression(mem::take(condition))), then: Box::new(Expression { position: then.position.clone(), expression: ExpressionItem::Block(mem::take(then)) }), other: Some(Box::new(Expression { position: expression.position.clone(), expression: ExpressionItem::If(mem::take(expression)) })) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::IfExpression(Default::default()), &[Terminal(Token::If(Default::default())), NonTerminal(Symbol::LetBinding(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::If((Range { start, .. }))), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, then)))] = list {
+                        |list| if let [Terminal(Token::If(Range { start, .. })), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, then)))] = list {
                             Symbol::IfExpression((*start..*end, If { position: *start..*end, condition: Box::new(Condition::LetBinding(mem::take(condition))), then: Box::new(Expression { position: then.position.clone(), expression: ExpressionItem::Block(mem::take(then)) }), other: None }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::IfExpression(Default::default()), &[Terminal(Token::If(Default::default())), NonTerminal(Symbol::LetBinding(Default::default())), NonTerminal(Symbol::Block(Default::default())), Terminal(Token::Else(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::If((Range { start, .. }))), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::Block((Range { end, .. }, other)))] = list {
+                        |list| if let [Terminal(Token::If(Range { start, .. })), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::Block((Range { end, .. }, other)))] = list {
                             Symbol::IfExpression((*start..*end, If { position: *start..*end, condition: Box::new(Condition::LetBinding(mem::take(condition))), then: Box::new(Expression { position: then.position.clone(), expression: ExpressionItem::Block(mem::take(then)) }), other: Some(Box::new(Expression { position: other.position.clone(), expression: ExpressionItem::Block(mem::take(other)) })) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::IfExpression(Default::default()), &[Terminal(Token::If(Default::default())), NonTerminal(Symbol::LetBinding(Default::default())), NonTerminal(Symbol::Block(Default::default())), Terminal(Token::Else(Default::default())), NonTerminal(Symbol::IfExpression(Default::default()))],
-                        |list| if let [Terminal(Token::If((Range { start, .. }))), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::IfExpression((Range { end, .. }, other)))] = list {
+                        |list| if let [Terminal(Token::If(Range { start, .. })), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((_, then))), _, NonTerminal(Symbol::IfExpression((Range { end, .. }, other)))] = list {
                             Symbol::IfExpression((*start..*end, If { position: *start..*end, condition: Box::new(Condition::LetBinding(mem::take(condition))), then: Box::new(Expression { position: then.position.clone(), expression: ExpressionItem::Block(mem::take(then)) }), other: Some(Box::new(Expression { position: other.position.clone(), expression: ExpressionItem::If(mem::take(other)) })) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::MatchExpression(Default::default()), &[Terminal(Token::Match(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::MatchPatterns(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Match((Range { start, .. }))), NonTerminal(Symbol::Expression((_, condition))), _, NonTerminal(Symbol::MatchPatterns((_, items))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Match(Range { start, .. })), NonTerminal(Symbol::Expression((_, condition))), _, NonTerminal(Symbol::MatchPatterns((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::MatchExpression((*start..*end, Match { position: *start..*end, condition: Box::new(mem::take(condition)), items: mem::take(items) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::MatchExpression(Default::default()), &[Terminal(Token::Match(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::MatchPatterns(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::Match((Range { start, .. }))), NonTerminal(Symbol::Expression((_, condition))), _, NonTerminal(Symbol::MatchPatterns((_, items))), _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Match(Range { start, .. })), NonTerminal(Symbol::Expression((_, condition))), _, NonTerminal(Symbol::MatchPatterns((_, items))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::MatchExpression((*start..*end, Match { position: *start..*end, condition: Box::new(mem::take(condition)), items: mem::take(items) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::MatchPatterns(Default::default()), &[NonTerminal(Symbol::Pattern(Default::default())), Terminal(Token::MatchArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
@@ -884,7 +884,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ForStatement(Default::default()), &[Terminal(Token::For(Default::default())), NonTerminal(Symbol::Pattern(Default::default())), Terminal(Token::In(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::For((Range { start, .. }))), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Expression((_, iter))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
+                        |list| if let [Terminal(Token::For(Range { start, .. })), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Expression((_, iter))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
                             Symbol::ForStatement((*start..*end, ForStatement { label: None, position: *start..*end, pattern: mem::take(pattern), iter: mem::take(iter), block: mem::take(block) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ForStatement(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::Colon(Default::default())), Terminal(Token::For(Default::default())), NonTerminal(Symbol::Pattern(Default::default())), Terminal(Token::In(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
@@ -892,11 +892,11 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::ForStatement((*start..*end, ForStatement { label: Some(label.clone()), position: *start..*end, pattern: mem::take(pattern), iter: mem::take(iter), block: mem::take(block) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::WhileStatement(Default::default()), &[Terminal(Token::While(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::While((Range { start, .. }))), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
+                        |list| if let [Terminal(Token::While(Range { start, .. })), NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
                             Symbol::WhileStatement((*start..*end, WhileStatement { label: None, position: *start..*end, condition: Condition::BoolExpression(mem::take(condition)), block: mem::take(block) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::WhileStatement(Default::default()), &[Terminal(Token::While(Default::default())), NonTerminal(Symbol::LetBinding(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::While((Range { start, .. }))), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
+                        |list| if let [Terminal(Token::While(Range { start, .. })), NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] = list {
                             Symbol::WhileStatement((*start..*end, WhileStatement { label: None, position: *start..*end, condition: Condition::LetBinding(mem::take(condition)), block: mem::take(block) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::WhileStatement(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::Colon(Default::default())), Terminal(Token::While(Default::default())), NonTerminal(Symbol::Expression(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
@@ -912,15 +912,15 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::Pattern((position.clone(), Pattern::Variable(pattern.clone())))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Pattern(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Pattern((*start..*end, Pattern::Struct(mem::take(name), Vec::new())))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Pattern(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::PatternStructItems(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::PatternStructItems((_, items))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::PatternStructItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Pattern((*start..*end, Pattern::Struct(mem::take(name), mem::take(items))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::Pattern(Default::default()), &[NonTerminal(Symbol::StructName(Default::default())), Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::PatternStructItems(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::PatternStructItems((_, items))), _, Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::PatternStructItems((_, items))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::Pattern((*start..*end, Pattern::Struct(mem::take(name), mem::take(items))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::PatternStructItems(Default::default()), &[Terminal(Token::Identifier(Default::default()))],
@@ -979,99 +979,99 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: mem::take(t), expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: Type::None, expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: mem::take(t), expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: Type::None, expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: mem::take(t), expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: Type::None, expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: mem::take(t), expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: Type::None, expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: Vec::new(), return_type: mem::take(t), expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: Vec::new(), return_type: Type::None, expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, _, NonTerminal(Symbol::Type((_, t))), NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: Vec::new(), return_type: mem::take(t), expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), NonTerminal(Symbol::Block(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, NonTerminal(Symbol::Block((Range { end, .. }, expression)))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: Vec::new(), return_type: Type::None, expression: Expression { position: expression.position.clone(), expression: ExpressionItem::Block(mem::take(expression)) } }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: mem::take(t), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: Type::None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: mem::take(t), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: Type::None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: mem::take(t), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: mem::take(arguments), return_type: Type::None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: mem::take(t), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::FunctionArguments(Default::default())), Terminal(Token::Comma(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, NonTerminal(Symbol::FunctionArguments((_, arguments))), Terminal(Token::Comma(_)), _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: mem::take(arguments), return_type: Type::None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: Vec::new(), return_type: mem::take(t), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: Vec::new(), return_type: Type::None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Type(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: Vec::new(), return_type: mem::take(t), expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionDefinition(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::GenericsTypeArguments(Default::default())), Terminal(Token::GreaterThan(Default::default())), Terminal(Token::RoundBracketOpen(Default::default())), Terminal(Token::RoundBracketClose(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Fn((Range { start, .. }))), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: Vec::new(), return_type: Type::None, expression: mem::take(expression) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::FunctionArguments(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::Colon(Default::default())), NonTerminal(Symbol::Type(Default::default()))],
@@ -1086,7 +1086,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ImportStatement(Default::default()), &[Terminal(Token::Import(Default::default())), NonTerminal(Symbol::ImportPath(Default::default())), Terminal(Token::Semicolon(Default::default()))],
-                        |list| if let [Terminal(Token::Import((Range { start, .. }))), NonTerminal(Symbol::ImportPath((_, path))), Terminal(Token::Semicolon((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::Import(Range { start, .. })), NonTerminal(Symbol::ImportPath((_, path))), Terminal(Token::Semicolon(Range { end, .. }))] = list {
                             Symbol::ImportStatement((*start..*end, mem::take(path)))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ImportPath(Default::default()), &[NonTerminal(Symbol::ImportPathChild(Default::default()))],
@@ -1106,7 +1106,7 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                             Symbol::ImportPathChild((*start..*end, ImportPath::Child(name.clone(), Box::new(mem::take(path)))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ImportPathChild(Default::default()), &[Terminal(Token::WaveBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedImportPathChildren(Default::default())), Terminal(Token::WaveBracketClose(Default::default()))],
-                        |list| if let [Terminal(Token::WaveBracketOpen((Range { start, .. }))), NonTerminal(Symbol::CommaSeparatedImportPathChildren((_, paths))), Terminal(Token::WaveBracketClose((Range { end, .. })))] = list {
+                        |list| if let [Terminal(Token::WaveBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedImportPathChildren((_, paths))), Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::ImportPathChild((*start..*end, ImportPath::List(mem::take(paths))))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::CommaSeparatedImportPathChildren(Default::default()), &[NonTerminal(Symbol::ImportPathChild(Default::default()))],
@@ -1142,11 +1142,11 @@ pub fn get_parser() -> LR1Parser<Symbol, Token> {
 mod tests {
     use parser::LR1Parser;
 
-    use crate::parser::{get_parser, get_syntax};
+    use crate::parser::{get_syntax};
 
     #[test]
     fn test_parse() {
-        let (parser, warning) = LR1Parser::new(get_syntax());
+        let (_parser, warning) = LR1Parser::new(get_syntax());
         assert_eq!(warning.len(), 0, "{}", warning.into_iter().map(|w| format!("{:?}", w)).collect::<Vec<_>>().join("\n"));
     }
 }

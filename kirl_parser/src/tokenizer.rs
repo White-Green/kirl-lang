@@ -130,7 +130,7 @@ impl Error for TokenizeError {
     }
 }
 
-fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)> {
+pub fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)> {
     let (tokenizer, _warning) = DFATokenizer::<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)>::builder()
         .pattern("//.+", |_, _| Ok(None))
         .pattern("/\\*(\\*[^/]|[^\\*])*\\*/", |_, _| Ok(None))
