@@ -12,13 +12,13 @@ use crate::tokenizer::Token;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Statement {
     position: Range<CharacterPosition>,
     statement: StatementItem,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StatementItem {
     Import(ImportPath),
     Expression(Expression),
@@ -37,7 +37,7 @@ impl Default for StatementItem {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ForStatement {
     label: Option<String>,
     position: Range<CharacterPosition>,
@@ -46,7 +46,7 @@ pub struct ForStatement {
     block: Block,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Condition {
     BoolExpression(Expression),
     LetBinding(LetBinding),
@@ -58,7 +58,7 @@ impl Default for Condition {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct WhileStatement {
     label: Option<String>,
     position: Range<CharacterPosition>,
@@ -66,14 +66,14 @@ pub struct WhileStatement {
     block: Block,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Block {
     position: Range<CharacterPosition>,
     statements: Vec<Statement>,
     last_expression: Option<Box<Expression>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Function {
     position: Range<CharacterPosition>,
     name: String,
@@ -83,14 +83,14 @@ pub struct Function {
     expression: Expression,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Struct {
     name: String,
     generics_arguments: Vec<String>,
     members: Vec<(String, Type)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ImportPath {
     Item(String),
     List(Vec<ImportPath>),
@@ -103,33 +103,33 @@ impl Default for ImportPath {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Path {
     position: Range<CharacterPosition>,
     path: Vec<String>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct NamedType {
     position: Range<CharacterPosition>,
     path: Vec<String>,
     generics_arguments: Vec<Type>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct FunctionType {
     position: Range<CharacterPosition>,
     argument: Vec<Type>,
     result: Box<Type>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct AnonymousStructType {
     position: Range<CharacterPosition>,
     members: Vec<(String, Type)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Type {
     None,
     Unreachable(Range<CharacterPosition>),
@@ -147,7 +147,7 @@ impl Default for Type {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StructName {
     Anonymous,
     Named(NamedType),
@@ -159,13 +159,13 @@ impl Default for StructName {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Expression {
     position: Range<CharacterPosition>,
     expression: ExpressionItem,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ExpressionItem {
     AccessVariable(Path),
     StringImmediate(String),
@@ -173,6 +173,7 @@ pub enum ExpressionItem {
     FloatImmediate(f64),
     AccessMember(Box<Expression>, String),
     CallFunction(Box<Expression>, Option<Path>, Vec<Expression>),
+    Indexer(Box<Expression>, Box<Expression>),
     ConstructTuple(Vec<Expression>),
     ConstructArray(Vec<Expression>),
     ConstructStruct(ConstructStruct),
@@ -193,6 +194,7 @@ pub enum ExpressionItem {
     And(Box<Expression>, Box<Expression>),
     Xor(Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
+    Assign(Box<Expression>, Box<Expression>),
     Closure(Closure),
     If(If),
     Match(Match),
@@ -204,13 +206,13 @@ impl Default for ExpressionItem {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct ConstructStruct {
     name: StructName,
     items: Vec<(String, Expression)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum KirlTopLevelStatement {
     Statement((Range<CharacterPosition>, Statement)),
     FunctionDefinition((Range<CharacterPosition>, Function)),
@@ -223,7 +225,7 @@ impl Default for KirlTopLevelStatement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Pattern {
     Variable(String),
     Struct(StructName, Vec<(String, Pattern)>),
@@ -235,7 +237,7 @@ impl Default for Pattern {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct LetBinding {
     position: Range<CharacterPosition>,
     pattern: Pattern,
@@ -243,14 +245,14 @@ pub struct LetBinding {
     expression: Expression,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Closure {
     position: Range<CharacterPosition>,
     arguments: Vec<(String, Option<Type>)>,
     expression: Box<Expression>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct If {
     position: Range<CharacterPosition>,
     condition: Box<Condition>,
@@ -258,14 +260,14 @@ pub struct If {
     other: Option<Box<Expression>>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct Match {
     position: Range<CharacterPosition>,
     condition: Box<Expression>,
     items: Vec<(Pattern, Expression)>,
 }
 
-#[derive(Debug, EnumIndex)]
+#[derive(Debug, EnumIndex, PartialEq)]
 pub enum Symbol {
     ValidKirlCode((Range<CharacterPosition>, Vec<KirlTopLevelStatement>)),
     Type((Range<CharacterPosition>, Type)),
@@ -486,22 +488,22 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                         |list| if let [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] = list {
                             Symbol::ConstructStruct((*start..*end, ConstructStruct { name: mem::take(name), items: Vec::new() }))
                         } else { unreachable!() }))
-        .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Identifier(Default::default()))],
-                        |list| if let [Terminal(Token::Identifier((position, name)))] = list {
-                            Symbol::StructName((position.clone(), StructName::Named(NamedType { position: position.clone(), path: vec![name.clone()], generics_arguments: Vec::new() })))
-                        } else { unreachable!() }))
-        .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
-                        |list| if let [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
-                            Symbol::StructName((*start..*end, StructName::Named(NamedType { position: *start..*end, path: vec![name.clone()], generics_arguments: mem::take(types) })))
-                        } else { unreachable!() }))
-        .rule(Rule::new(Symbol::StructName(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::FullPath((position, path)))] = list {
-                            Symbol::StructName((position.clone(), StructName::Named(NamedType { position: position.clone(), path: mem::take(&mut path.path), generics_arguments: Vec::new() })))
-                        } else { unreachable!() }))
-        .rule(Rule::new(Symbol::StructName(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
-                        |list| if let [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
-                            Symbol::StructName((*start..*end, StructName::Named(NamedType { position: *start..*end, path: mem::take(&mut path.path), generics_arguments: mem::take(types) })))
-                        } else { unreachable!() }))
+        // .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Identifier(Default::default()))],
+        //                 |list| if let [Terminal(Token::Identifier((position, name)))] = list {
+        //                     Symbol::StructName((position.clone(), StructName::Named(NamedType { position: position.clone(), path: vec![name.clone()], generics_arguments: Vec::new() })))
+        //                 } else { unreachable!() }))
+        // .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Identifier(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
+        //                 |list| if let [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
+        //                     Symbol::StructName((*start..*end, StructName::Named(NamedType { position: *start..*end, path: vec![name.clone()], generics_arguments: mem::take(types) })))
+        //                 } else { unreachable!() }))
+        // .rule(Rule::new(Symbol::StructName(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default()))],
+        //                 |list| if let [NonTerminal(Symbol::FullPath((position, path)))] = list {
+        //                     Symbol::StructName((position.clone(), StructName::Named(NamedType { position: position.clone(), path: mem::take(&mut path.path), generics_arguments: Vec::new() })))
+        //                 } else { unreachable!() }))
+        // .rule(Rule::new(Symbol::StructName(Default::default()), &[NonTerminal(Symbol::FullPath(Default::default())), Terminal(Token::DoubleColon(Default::default())), Terminal(Token::LessThan(Default::default())), NonTerminal(Symbol::CommaSeparatedTypes(Default::default())), Terminal(Token::GreaterThan(Default::default()))],
+        //                 |list| if let [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] = list {
+        //                     Symbol::StructName((*start..*end, StructName::Named(NamedType { position: *start..*end, path: mem::take(&mut path.path), generics_arguments: mem::take(types) })))
+        //                 } else { unreachable!() }))
         .rule(Rule::new(Symbol::StructName(Default::default()), &[Terminal(Token::Sharp(Default::default()))],
                         |list| if let [Terminal(Token::Sharp(position))] = list {
                             Symbol::StructName((position.clone(), StructName::Anonymous))
@@ -686,6 +688,10 @@ fn get_syntax() -> Syntax<Symbol, Token> {
                         |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Box::new(mem::take(expression)), None, mem::take(arguments)) }))
                         } else { unreachable!() }))
+        .rule(Rule::new(Symbol::Expression8(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::SquareBracketOpen(Default::default())), NonTerminal(Symbol::Expression(Default::default())), Terminal(Token::SquareBracketClose(Default::default()))],
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::Expression((_, index))), Terminal(Token::SquareBracketClose(Range { end, .. }))] = list {
+                            Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Indexer(Box::new(mem::take(expression)), Box::new(mem::take(index))) }))
+                        } else { unreachable!() }))
         .rule(Rule::new(Symbol::Expression8(Default::default()), &[Terminal(Token::RoundBracketOpen(Default::default())), NonTerminal(Symbol::CommaSeparatedExpressions(Default::default())), Terminal(Token::RoundBracketClose(Default::default()))],
                         |list| if let [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {
                             Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(mem::take(expressions)) }))
@@ -837,6 +843,10 @@ fn get_syntax() -> Syntax<Symbol, Token> {
         .rule(Rule::new(Symbol::Expression(Default::default()), &[NonTerminal(Symbol::MatchExpression(Default::default()))],
                         |list| if let [NonTerminal(Symbol::MatchExpression((position, expression)))] = list {
                             Symbol::Expression((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::Match(mem::take(expression)) }))
+                        } else { unreachable!() }))
+        .rule(Rule::new(Symbol::Expression(Default::default()), &[NonTerminal(Symbol::Expression8(Default::default())), Terminal(Token::Assign(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
+                        |list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, variable))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
+                            Symbol::Expression((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Assign(Box::new(mem::take(variable)), Box::new(mem::take(expression))) }))
                         } else { unreachable!() }))
         .rule(Rule::new(Symbol::ClosureExpression(Default::default()), &[Terminal(Token::Fn(Default::default())), Terminal(Token::Colon(Default::default())), NonTerminal(Symbol::ClosureArguments(Default::default())), Terminal(Token::Or(Default::default())), Terminal(Token::FunctionArrow(Default::default())), NonTerminal(Symbol::Expression(Default::default()))],
                         |list| if let [Terminal(Token::Fn(Range { start, .. })), _, NonTerminal(Symbol::ClosureArguments((_, arguments))), _, _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] = list {
