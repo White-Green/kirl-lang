@@ -1,5 +1,6 @@
 /*
 !/.gitignore
 !/kirl_parser
+!/kirl_semantic_analyzer
 !/tools
 !/Cargo.toml
