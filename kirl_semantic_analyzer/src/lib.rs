@@ -13,7 +13,6 @@ use kirl_parser::kirl_parser::{AnonymousStructType, Function, FunctionType, Impo
 pub mod name_resolver;
 pub mod syntax_tree_to_hir;
 pub mod type_checker;
-pub mod codegen;
 
 pub struct WithImport<T> {
     pub import: ImportPath,
@@ -48,6 +47,21 @@ pub fn collect_top_level_item_with_imports(top_level_statements: Vec<KirlTopLeve
         }
     }
     KirlTopLevelItems { statements, structs, functions }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct HIRStatementList<Reference>(pub Vec<HIRStatement<Reference>>);
+
+impl<Reference> From<Vec<HIRStatement<Reference>>> for HIRStatementList<Reference> {
+    fn from(value: Vec<HIRStatement<Reference>>) -> Self {
+        HIRStatementList(value)
+    }
+}
+
+impl<Reference> From<HIRStatementList<Reference>> for Vec<HIRStatement<Reference>> {
+    fn from(value: HIRStatementList<Reference>) -> Self {
+        value.0
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -87,7 +101,7 @@ pub enum HIRExpression<Reference> {
         variable: ReferenceAccess<Reference>,
         value: Variable<Reference>,
     },
-    // ConstructClosure,
+    // ConstructClosure,(TODO)
     ConstructStruct(BTreeMap<String, Variable<Reference>>),
     ConstructTuple(Vec<Variable<Reference>>),
     ConstructArray(Vec<Variable<Reference>>),

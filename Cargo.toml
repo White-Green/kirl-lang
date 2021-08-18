@@ -2,5 +2,6 @@
 members = [
     "kirl_parser",
     "kirl_semantic_analyzer",
+    "kirl_vm",
     "tools/parser_generator",
 ]
