@@ -1,7 +1,10 @@
 /*
 !/.gitignore
+!/kirl
+!/kirl_engine
 !/kirl_vm
 !/kirl_parser
 !/kirl_semantic_analyzer
+!/kirl_stdlib
 !/tools
 !/Cargo.toml

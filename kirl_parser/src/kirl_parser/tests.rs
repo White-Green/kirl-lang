@@ -3,10 +3,11 @@ use tokenizer::Tokenize;
 
 use crate::kirl_parser::{get_parser, AnonymousStructType, Block, Condition, ConstructStruct, Expression, ExpressionItem, Function, If, KirlTopLevelStatement, LetBinding, NamedType, Path, Pattern, Statement, StatementItem, StructName, Symbol, Type};
 use crate::kirl_tokenizer::get_tokenizer;
-use crate::CharacterPosition;
+use crate::{CharacterPosition, KirlParser};
 
 #[test]
 fn test_parse() {
+    KirlParser::new();
     let tokenizer = get_tokenizer();
     let parser = get_parser();
     const CODE: &str = r#"

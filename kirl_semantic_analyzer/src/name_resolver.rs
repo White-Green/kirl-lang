@@ -1,9 +1,113 @@
+use std::collections::{BTreeMap, HashMap};
+use std::ops::DerefMut;
+
 use uuid::Uuid;
 
 use crate::{HIRExpression, HIRStatement, HIRType, ReferenceAccess, Variable};
 
 pub trait KirlNameResolver {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)>;
+}
+
+impl<T: KirlNameResolver> KirlNameResolver for &mut T {
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        (*self).resolve(full_path)
+    }
+}
+
+impl<R1> KirlNameResolver for (R1,)
+where
+    R1: KirlNameResolver,
+{
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        let (r1,) = self;
+        r1.resolve(full_path)
+    }
+}
+
+impl<R1, R2> KirlNameResolver for (R1, R2)
+where
+    R1: KirlNameResolver,
+    R2: KirlNameResolver,
+{
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        let (r1, r2) = self;
+        let mut result = r1.resolve(full_path);
+        result.extend(r2.resolve(full_path));
+        result
+    }
+}
+
+impl<R1, R2, R3> KirlNameResolver for (R1, R2, R3)
+where
+    R1: KirlNameResolver,
+    R2: KirlNameResolver,
+    R3: KirlNameResolver,
+{
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        let (r1, r2, r3) = self;
+        let mut result = r1.resolve(full_path);
+        result.extend(r2.resolve(full_path));
+        result.extend(r3.resolve(full_path));
+        result
+    }
+}
+
+impl<R1, R2, R3, R4> KirlNameResolver for (R1, R2, R3, R4)
+where
+    R1: KirlNameResolver,
+    R2: KirlNameResolver,
+    R3: KirlNameResolver,
+    R4: KirlNameResolver,
+{
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        let (r1, r2, r3, r4) = self;
+        let mut result = r1.resolve(full_path);
+        result.extend(r2.resolve(full_path));
+        result.extend(r3.resolve(full_path));
+        result.extend(r4.resolve(full_path));
+        result
+    }
+}
+
+impl<R1, R2, R3, R4, R5> KirlNameResolver for (R1, R2, R3, R4, R5)
+where
+    R1: KirlNameResolver,
+    R2: KirlNameResolver,
+    R3: KirlNameResolver,
+    R4: KirlNameResolver,
+    R5: KirlNameResolver,
+{
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        let (r1, r2, r3, r4, r5) = self;
+        let mut result = r1.resolve(full_path);
+        result.extend(r2.resolve(full_path));
+        result.extend(r3.resolve(full_path));
+        result.extend(r4.resolve(full_path));
+        result.extend(r5.resolve(full_path));
+        result
+    }
+}
+
+impl<R: DerefMut> KirlNameResolver for [R]
+where
+    R::Target: KirlNameResolver,
+{
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        self.iter_mut().flat_map(|resolver| resolver.resolve(full_path)).collect()
+    }
+}
+
+impl<R: KirlNameResolver> KirlNameResolver for HashMap<String, R> {
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        full_path.first().and_then(|key| self.get_mut(key)).map(|resolver| resolver.resolve(&full_path[1..])).unwrap_or_default()
+    }
+}
+
+impl<R: KirlNameResolver> KirlNameResolver for BTreeMap<String, R> {
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        full_path.first().and_then(|key| self.get_mut(key)).map(|resolver| resolver.resolve(&full_path[1..])).unwrap_or_default()
+    }
 }
 
 trait Resolvable {

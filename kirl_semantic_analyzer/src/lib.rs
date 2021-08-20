@@ -14,11 +14,13 @@ pub mod name_resolver;
 pub mod syntax_tree_to_hir;
 pub mod type_checker;
 
+#[derive(Debug)]
 pub struct WithImport<T> {
     pub import: ImportPath,
     pub item: T,
 }
 
+#[derive(Debug)]
 pub struct KirlTopLevelItems {
     pub statements: Vec<Statement>,
     pub structs: Vec<WithImport<Struct>>,

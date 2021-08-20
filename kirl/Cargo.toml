@@ -1,12 +1,14 @@
 [package]
-name = "kirl_vm"
+name = "kirl"
 version = "0.1.0"
-authors = ["White-Green <43771790+White-Green@users.noreply.github.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uuid = "0.8.2"
+clap = "2.33.3"
 anyhow = "1.0.43"
+kirl_parser = { path = "../kirl_parser" }
 kirl_semantic_analyzer = { path = "../kirl_semantic_analyzer" }
+kirl_vm = { path = "../kirl_vm" }
+kirl_engine = { path = "../kirl_engine" }

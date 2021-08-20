@@ -22,7 +22,7 @@ impl Display for DecisionTypeError {
             DecisionTypeError::UnImplementedFeature(feature) => write!(f, "feature {:?} is not implemented yet.", feature),
             DecisionTypeError::ConflictUuid(id) => write!(f, "reference id {} is conflicted.", id),
             DecisionTypeError::TypeMismatched { expected, actual } => write!(f, "expected type {} but found {}", expected.to_string(), actual.to_string()),
-            DecisionTypeError::NamedReferenceIsNotUnique(_) => write!(f, "named reference is not unique"),
+            DecisionTypeError::NamedReferenceIsNotUnique(list) => write!(f, "named reference is not unique(found {} references)", list.len()),
         }
     }
 }

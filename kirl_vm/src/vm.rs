@@ -1,5 +1,6 @@
 use std::any::Any;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use crate::bytecode::{KirlByteCode, KirlByteCodeOpcode, KirlRustFunction, KirlVMExecutable, KirlVMValueCloneable};
 
@@ -11,9 +12,9 @@ pub fn exec(
         rust_functions,
         function_pointers,
         member_names,
-    }: &mut KirlVMExecutable,
+    }: &KirlVMExecutable,
 ) {
-    fn exec_inner(bytecodes: &[KirlByteCode], start: usize, local_stack: &mut Vec<Box<dyn KirlVMValueCloneable>>, static_value_generators: &mut [Box<dyn FnMut() -> Box<dyn KirlVMValueCloneable>>], rust_functions: &mut [Box<dyn KirlRustFunction>], function_pointers: &mut [usize], member_names: &mut [String]) {
+    fn exec_inner(bytecodes: &[KirlByteCode], start: usize, local_stack: &mut Vec<Box<dyn KirlVMValueCloneable>>, static_value_generators: &[Arc<dyn Fn() -> Box<dyn KirlVMValueCloneable>>], rust_functions: &[Arc<Mutex<dyn KirlRustFunction>>], function_pointers: &[usize], member_names: &[String]) {
         let mut global_stack: Vec<Box<dyn KirlVMValueCloneable>> = Vec::new();
         let mut program_counter = start;
         loop {
@@ -56,13 +57,13 @@ pub fn exec(
                 }
                 KirlByteCodeOpcode::CallRustFunction => {
                     let operand = instruction.operand();
-                    let function = &mut rust_functions[operand as usize];
+                    let mut function = rust_functions[operand as usize].lock().unwrap();
                     let argument_count = function.argument_count();
                     let mut arguments = Vec::with_capacity(argument_count);
                     for _ in 0..argument_count {
                         arguments.push(local_stack.pop().expect(""));
                     }
-                    let ret = function.call(&arguments);
+                    let ret = function.call(arguments).expect("TODO:組み込み関数が失敗した場合(ここ)の処理");
                     local_stack.push(ret);
                 }
                 KirlByteCodeOpcode::Return => {

@@ -1,6 +1,11 @@
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::error::Error;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 
 use uuid::Uuid;
 
@@ -63,10 +68,82 @@ impl KirlByteCode {
 
 pub trait KirlRustFunction: Send + Sync {
     fn argument_count(&self) -> usize;
-    fn call(&mut self, args: &[Box<dyn KirlVMValueCloneable>]) -> Box<dyn KirlVMValueCloneable>;
+    fn call(&mut self, args: Vec<Box<dyn KirlVMValueCloneable>>) -> Result<Box<dyn KirlVMValueCloneable>, Box<dyn Error>>;
 }
 
-pub trait KirlVMValue: Any + Send + Sync + 'static {}
+pub struct FunctionWrapper<Args, Result, F>(F, PhantomData<(Args, Result)>);
+
+macro_rules! count {
+    ()=>{ 0 };
+    ($t:ident)=>{ 1 };
+    ($f:ident,$($t:ident),*)=>{ 1 + count!($($t),*) };
+}
+
+macro_rules! impl_fn {
+    ()=>{
+        impl<R, F> From<F> for FunctionWrapper<(), R, F>
+            where F: FnMut() -> R {
+            fn from(function: F) -> Self {
+                FunctionWrapper(function, PhantomData::default())
+            }
+        }
+        impl<R, E, F> KirlRustFunction for FunctionWrapper<(), Result<R, E>, F>
+            where F: FnMut() -> Result<R, E>,
+                  R: KirlVMValueCloneable,
+                  E: std::error::Error + 'static,
+                  Self: Send + Sync {
+            fn argument_count(&self) -> usize { count!() }
+            fn call(&mut self, args: Vec<Box<dyn KirlVMValueCloneable>>) -> Result<Box<dyn KirlVMValueCloneable>, Box<dyn Error>> {
+                if let Ok([]) = <[_;count!()] as std::convert::TryFrom<_>>::try_from(args) {
+                    self.0().map(|result|Box::new(result) as Box<dyn KirlVMValueCloneable>).map_err(|err|Box::new(err) as Box<dyn Error>)
+                } else { unreachable!() }
+            }
+        }
+    };
+    ($($t:ident),*)=>{
+        impl<R, F, $($t),*> From<F> for FunctionWrapper<($($t),*,), R, F>
+            where F: FnMut($($t),*,) -> R {
+            fn from(function: F) -> Self {
+                FunctionWrapper(function, PhantomData::default())
+            }
+        }
+        impl<R, E, F, $($t),*> KirlRustFunction for FunctionWrapper<($($t),*,), Result<R, E>, F>
+            where F: FnMut($($t),*,) -> Result<R, E>,
+                  R: KirlVMValueCloneable,
+                  E: std::error::Error + 'static,
+                  Self: Send + Sync,
+                  $($t: KirlVMValueCloneable),* {
+            fn argument_count(&self) -> usize { count!($($t),*) }
+            fn call(&mut self, args: Vec<Box<dyn KirlVMValueCloneable>>) -> Result<Box<dyn KirlVMValueCloneable>, Box<dyn Error>> {
+                #[allow(non_snake_case)]
+                if let Ok([$($t),*]) = <[_;count!($($t),*)] as std::convert::TryFrom<_>>::try_from(args) {
+                    self.0($(*downcast::<$t>($t).expect("")),*).map(|result|Box::new(result) as Box<dyn KirlVMValueCloneable>).map_err(|err|Box::new(err) as Box<dyn Error>)
+                } else { unreachable!() }
+            }
+        }
+    }
+}
+
+fn downcast<T: 'static>(value: Box<dyn KirlVMValueCloneable>) -> Result<Box<T>, Box<dyn KirlVMValueCloneable>> {
+    let item = value.deref();
+    if item.type_id() == TypeId::of::<T>() {
+        unsafe {
+            let ptr = Box::into_raw(value);
+            Ok(Box::from_raw(ptr as *mut T))
+        }
+    } else {
+        Err(value)
+    }
+}
+
+impl_fn!();
+impl_fn!(A1);
+impl_fn!(A1, A2);
+impl_fn!(A1, A2, A3);
+impl_fn!(A1, A2, A3, A4);
+impl_fn!(A1, A2, A3, A4, A5);
+
+pub trait KirlVMValue: Any + Debug + Send + Sync + 'static {}
 
 impl KirlVMValue for String {}
 
@@ -99,15 +176,14 @@ impl Clone for Box<dyn KirlVMValueCloneable> {
 pub struct KirlVMExecutable {
     pub(crate) bytecodes: Vec<KirlByteCode>,
     pub(crate) entry_point: usize,
-    pub(crate) static_value_generators: Vec<Box<dyn FnMut() -> Box<dyn KirlVMValueCloneable>>>,
-    pub(crate) rust_functions: Vec<Box<dyn KirlRustFunction>>,
+    pub(crate) static_value_generators: Vec<Arc<dyn Fn() -> Box<dyn KirlVMValueCloneable>>>,
+    pub(crate) rust_functions: Vec<Arc<Mutex<dyn KirlRustFunction>>>,
     pub(crate) function_pointers: Vec<usize>,
     pub(crate) member_names: Vec<String>,
 }
 
 impl KirlVMExecutable {
-    //TODO:組み込み関数の読み込みがいるね
-    pub fn new(functions: impl IntoIterator<Item = (Uuid, Vec<LIRStatement>)>, static_value_generators: impl IntoIterator<Item = (Uuid, Box<dyn FnMut() -> Box<dyn KirlVMValueCloneable>>)>, rust_functions: impl IntoIterator<Item = (Uuid, Box<dyn KirlRustFunction>)>, main_function: Uuid) -> Self {
+    pub fn new(functions: impl IntoIterator<Item=(Uuid, Vec<LIRStatement>)>, static_value_generators: impl IntoIterator<Item=(Uuid, Arc<dyn Fn() -> Box<dyn KirlVMValueCloneable>>)>, rust_functions: impl IntoIterator<Item=(Uuid, Arc<Mutex<dyn KirlRustFunction>>)>, main_function: Uuid) -> Self {
         let (mut static_value_generators, static_value_index): (Vec<_>, HashMap<_, _>) = static_value_generators.into_iter().enumerate().map(|(i, (id, generator))| (generator, (id, u32::try_from(i).unwrap()))).unzip();
         let (rust_functions, rust_function_index): (Vec<_>, HashMap<_, _>) = rust_functions.into_iter().enumerate().map(|(i, (id, function))| (function, (id, u32::try_from(i).unwrap()))).unzip();
         let mut bytecodes = Vec::new();
@@ -131,6 +207,7 @@ impl KirlVMExecutable {
             member_names.resize_with(member_names.len().max(index as usize + 1), Default::default);
             member_names[index as usize] = name;
         }
+        bytecodes.push(KirlByteCode::without_operand(KirlByteCodeOpcode::Return));
         KirlVMExecutable {
             bytecodes,
             entry_point: function_pointers[function_pointer_reference[&main_function] as usize],
@@ -142,7 +219,7 @@ impl KirlVMExecutable {
     }
 }
 
-fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map: &mut HashMap<String, u32>, static_value_generators: &mut Vec<Box<dyn FnMut() -> Box<dyn KirlVMValueCloneable>>>, static_value_index: &HashMap<Uuid, u32>, rust_function_index: &HashMap<Uuid, u32>) -> (impl IntoIterator<Item = KirlByteCode>, impl IntoIterator<Item = (usize, Uuid)>) {
+fn lir_to_bytecode(lir: impl IntoIterator<Item=LIRStatement>, member_name_map: &mut HashMap<String, u32>, static_value_generators: &mut Vec<Arc<dyn Fn() -> Box<dyn KirlVMValueCloneable>>>, static_value_index: &HashMap<Uuid, u32>, rust_function_index: &HashMap<Uuid, u32>) -> (impl IntoIterator<Item=KirlByteCode>, impl IntoIterator<Item=(usize, Uuid)>) {
     let mut result = Vec::new();
     let mut label_position_map = HashMap::new();
     let mut position_label_map = HashMap::new();
@@ -157,7 +234,7 @@ fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map:
         match instruction {
             LIRInstruction::LoadImmediateString(value) => {
                 result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, static_value_generators.len() as u32));
-                static_value_generators.push(Box::new(move || Box::new(value.clone())));
+                static_value_generators.push(Arc::new(move || Box::new(value.clone())));
             }
             LIRInstruction::LoadImmediateNumber(_) => {
                 todo!()
@@ -175,7 +252,7 @@ fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map:
             }
             LIRInstruction::JumpIfHasType(ty, label) => {
                 result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, static_value_generators.len() as u32));
-                static_value_generators.push(Box::new(move || Box::new(ty.clone())));
+                static_value_generators.push(Arc::new(move || Box::new(ty.clone())));
                 position_label_map.insert(result.len(), label);
                 result.push(KirlByteCode::without_operand(KirlByteCodeOpcode::JumpIfHasType));
             }
