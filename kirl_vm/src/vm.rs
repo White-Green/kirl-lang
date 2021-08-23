@@ -1,8 +1,11 @@
-use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
-use crate::bytecode::{KirlByteCode, KirlByteCodeOpcode, KirlRustFunction, KirlVMExecutable, KirlVMValueCloneable};
+use crate::bytecode::{InterchangeKirlVMValue, KirlByteCode, KirlByteCodeOpcode, KirlRustFunction, KirlVMExecutable, KirlVMValueCloneable};
+
+fn unwrap<T: Clone>(ptr: Arc<RwLock<T>>) -> T {
+    Arc::try_unwrap(ptr).map(|rw| rw.into_inner().expect("")).unwrap_or_else(|ptr| ptr.read().expect("").clone())
+}
 
 pub fn exec(
     KirlVMExecutable {
@@ -14,8 +17,8 @@ pub fn exec(
         member_names,
     }: &KirlVMExecutable,
 ) {
-    fn exec_inner(bytecodes: &[KirlByteCode], start: usize, local_stack: &mut Vec<Box<dyn KirlVMValueCloneable>>, static_value_generators: &[Arc<dyn Fn() -> Box<dyn KirlVMValueCloneable>>], rust_functions: &[Arc<Mutex<dyn KirlRustFunction>>], function_pointers: &[usize], member_names: &[String]) {
-        let mut global_stack: Vec<Box<dyn KirlVMValueCloneable>> = Vec::new();
+    fn exec_inner(bytecodes: &[KirlByteCode], start: usize, local_stack: &mut Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>, static_value_generators: &[Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>], rust_functions: &[Arc<Mutex<dyn KirlRustFunction>>], function_pointers: &[usize], member_names: &[String]) {
+        let mut global_stack: Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> = Vec::new();
         let mut program_counter = start;
         loop {
             let instruction = bytecodes[program_counter];
@@ -26,19 +29,19 @@ pub fn exec(
                 }
                 KirlByteCodeOpcode::Load => {
                     let operand = instruction.operand() as usize;
-                    local_stack.push(global_stack[operand].kirl_clone());
+                    local_stack.push(global_stack[operand].clone());
                 }
                 KirlByteCodeOpcode::Store => {
                     let operand = instruction.operand() as usize;
                     if global_stack.len() <= operand {
-                        global_stack.resize_with(operand + 1, || Box::new(String::new()));
+                        global_stack.resize_with(operand + 1, || Arc::new(RwLock::new(String::new())));
                     }
                     global_stack[operand] = local_stack.pop().expect("");
                 }
                 KirlByteCodeOpcode::JumpIfTrue => {
                     let condition = local_stack.pop().expect("");
-                    let condition = *(&condition as &dyn Any).downcast_ref::<bool>().expect("");
-                    if condition {
+                    let condition = bool::try_from_kirl_value(condition).expect("");
+                    if *condition.read().expect("") {
                         let operand = instruction.operand_signed();
                         program_counter = ((program_counter as isize) + (operand as isize)) as usize;
                         continue;
@@ -73,27 +76,28 @@ pub fn exec(
                 KirlByteCodeOpcode::AccessMember => {
                     let operand = instruction.operand();
                     let value = local_stack.pop().expect("");
-                    let value = (&value as &dyn Any).downcast_ref::<HashMap<String, Box<dyn KirlVMValueCloneable>>>().expect("");
+                    let value = HashMap::<String, Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(value).expect("");
+                    let value = value.read().expect("");
                     let member = value.get(&member_names[operand as usize]).expect("");
-                    local_stack.push(member.kirl_clone());
+                    local_stack.push(Arc::clone(member));
                 }
                 KirlByteCodeOpcode::AssignMember => {
                     let operand = instruction.operand();
                     let value = local_stack.pop().expect("");
-                    let mut dest = local_stack.pop().expect("");
-                    let dest = (&mut dest as &mut dyn Any).downcast_mut::<HashMap<String, Box<dyn KirlVMValueCloneable>>>().expect("");
-                    dest.insert(member_names[operand as usize].clone(), value);
+                    let dest = local_stack.pop().expect("");
+                    let dest = HashMap::<String, Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(dest).expect("");
+                    dest.write().expect("").insert(member_names[operand as usize].clone(), value);
                 }
                 KirlByteCodeOpcode::ConstructStruct => {
                     let operand = instruction.operand();
                     let mut result = HashMap::with_capacity(operand as usize);
                     for _ in 0..operand {
                         let name = local_stack.pop().expect("");
-                        let name = (&name as &dyn Any).downcast_ref::<String>().expect("").clone();
+                        let name = unwrap(String::try_from_kirl_value(name).expect(""));
                         let value = local_stack.pop().expect("");
                         result.insert(name, value);
                     }
-                    local_stack.push(Box::new(result));
+                    local_stack.push(Arc::new(RwLock::new(result)));
                 }
                 KirlByteCodeOpcode::ConstructTuple => {
                     let operand = instruction.operand();
@@ -101,7 +105,7 @@ pub fn exec(
                     for i in 0..operand {
                         result.insert(format!("{}", i), local_stack.pop().expect(""));
                     }
-                    local_stack.push(Box::new(result));
+                    local_stack.push(Arc::new(RwLock::new(result)));
                 }
                 KirlByteCodeOpcode::ConstructArray => {
                     let operand = instruction.operand();
@@ -109,7 +113,7 @@ pub fn exec(
                     for _ in 0..operand {
                         result.push(local_stack.pop().expect(""));
                     }
-                    local_stack.push(Box::new(result));
+                    local_stack.push(Arc::new(RwLock::new(result)));
                 }
             }
             program_counter += 1;

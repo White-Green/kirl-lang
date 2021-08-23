@@ -8,6 +8,7 @@ use std::fmt::{Display, Formatter};
 use regex::Regex;
 use uuid::Uuid;
 
+use dec::Decimal128;
 use kirl_parser::kirl_parser::{AnonymousStructType, Function, FunctionType, ImportPath, KirlTopLevelStatement, NamedType, Pattern, Statement, StatementItem, Struct, StructName, Type};
 
 pub mod name_resolver;
@@ -112,7 +113,6 @@ pub enum HIRExpression<Reference> {
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq)]
 pub enum HIRType {
     Infer,
-    None,
     Unreachable,
     Named { path: Vec<String>, generics_arguments: Vec<HIRType> },
     Tuple(Vec<HIRType>),
@@ -153,7 +153,7 @@ impl TryFrom<Type> for HIRType {
     type Error = HIRTypeConvertError;
     fn try_from(ty: Type) -> Result<Self, Self::Error> {
         match ty {
-            Type::None => Ok(HIRType::None),
+            Type::None => Ok(HIRType::Tuple(Vec::new())),
             Type::Unreachable(_) => Ok(HIRType::Unreachable),
             Type::NamedType(NamedType { path, generics_arguments, .. }) => Ok(HIRType::Named {
                 path,
@@ -208,7 +208,6 @@ impl HIRType {
         match (self, rhs) {
             (HIRType::Infer, _) => true,
             (_, HIRType::Infer) => true,
-            (HIRType::None, HIRType::None) => true,
             (HIRType::Named { path: path1, generics_arguments: arg1 }, HIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.len() == items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Array(t1), HIRType::Array(t2)) => t1.is_a(t2),
@@ -281,8 +280,7 @@ pub enum ReferenceAccess<Reference> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Immediate {
-    Integer(i64),
-    Float(f64),
+    Number(Decimal128),
     String(String),
 }
 
@@ -344,7 +342,6 @@ impl ToString for HIRType {
     fn to_string(&self) -> String {
         match self {
             HIRType::Infer => "$Infer".to_string(),
-            HIRType::None => "None".to_string(),
             HIRType::Unreachable => "!".to_string(),
             HIRType::Named { path, generics_arguments } => {
                 let generics_arguments = generics_arguments.iter().map(ToString::to_string).reduce(|a, b| format!("{}, {}", a, b)).map(|a| format!("::<{}>", a)).unwrap_or_default();
@@ -380,8 +377,7 @@ where
     fn to_string(&self) -> String {
         match self {
             HIRExpression::Immediate(value) => match value {
-                Immediate::Integer(value) => format!("{}", value),
-                Immediate::Float(value) => format!("{}", value),
+                Immediate::Number(value) => format!("{}", value),
                 Immediate::String(value) => format!("{:?}", value),
             },
             HIRExpression::CallFunction { function, arguments } => {

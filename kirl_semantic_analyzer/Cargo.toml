@@ -11,3 +11,4 @@ kirl_parser = { path = "../kirl_parser" }
 regex = "1.5.4"
 uuid = "0.8.2"
 ghost-cell = "0.2.2"
+dec = "0.4.5"

@@ -164,7 +164,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             let mut imports = imports.clone();
             body.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: HIRType::Or(vec![HIRType::None, HIRType::AnonymousStruct(array::IntoIter::new([("value".to_string(), HIRType::Infer)]).collect())]),
+                variable_type: HIRType::Or(vec![HIRType::Tuple(Vec::new()), HIRType::AnonymousStruct(array::IntoIter::new([("value".to_string(), HIRType::Infer)]).collect())]),
                 expression: HIRExpression::CallFunction {
                     function: Variable::Named(get_candidate_paths(vec!["_next".to_string()], &imports)),
                     arguments: vec![iterator],
@@ -208,7 +208,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             }
             result.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: HIRType::None,
+                variable_type: HIRType::Tuple(Vec::new()),
                 expression: HIRExpression::Loop(body),
             });
             *variable_sequence += 1;
@@ -236,7 +236,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             )?;
             body.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: HIRType::None,
+                variable_type: HIRType::Tuple(Vec::new()),
                 expression: HIRExpression::If {
                     condition,
                     then: (vec![HIRStatement::Break(None)], Variable::Named(get_candidate_paths(vec!["None".to_string()], &imports))),
@@ -256,7 +256,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             }
             result.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: HIRType::None,
+                variable_type: HIRType::Tuple(Vec::new()),
                 expression: HIRExpression::Loop(body),
             });
             *variable_sequence += 1;
@@ -300,7 +300,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             }
             result.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: HIRType::None,
+                variable_type: HIRType::Tuple(Vec::new()),
                 expression: HIRExpression::Loop(body),
             });
             *variable_sequence += 1;
@@ -325,21 +325,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             *variable_sequence += 1;
             Ok((StatementReachable::Reachable, variable))
         }
-        ExpressionItem::IntegerImmediate(value) => {
+        ExpressionItem::NumberImmediate(value) => {
             result.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
-                expression: HIRExpression::Immediate(Immediate::Integer(value)),
-            });
-            let variable = Variable::Unnamed(*variable_sequence);
-            *variable_sequence += 1;
-            Ok((StatementReachable::Reachable, variable))
-        }
-        ExpressionItem::FloatImmediate(value) => {
-            result.push(HIRStatement::Binding {
-                variable_id: *variable_sequence,
-                variable_type: HIRType::Infer,
-                expression: HIRExpression::Immediate(Immediate::Float(value)),
+                expression: HIRExpression::Immediate(Immediate::Number(value)),
             });
             let variable = Variable::Unnamed(*variable_sequence);
             *variable_sequence += 1;

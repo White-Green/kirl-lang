@@ -4,6 +4,7 @@ use tokenizer::Tokenize;
 use crate::kirl_parser::{get_parser, AnonymousStructType, Block, Condition, ConstructStruct, Expression, ExpressionItem, Function, If, KirlTopLevelStatement, LetBinding, NamedType, Path, Pattern, Statement, StatementItem, StructName, Symbol, Type};
 use crate::kirl_tokenizer::get_tokenizer;
 use crate::{CharacterPosition, KirlParser};
+use dec::Decimal128;
 
 #[test]
 fn test_parse() {
@@ -134,7 +135,7 @@ struct MyStruct::<T> {
                                                 .into(),
                                                 Expression {
                                                     position: CharacterPosition::new(1, 17)..CharacterPosition::new(1, 20),
-                                                    expression: ExpressionItem::IntegerImmediate(100),
+                                                    expression: ExpressionItem::NumberImmediate(Decimal128::from(100)),
                                                 }
                                                 .into()
                                             ),
@@ -204,7 +205,7 @@ struct MyStruct::<T> {
                                                                     .into(),
                                                                     Expression {
                                                                         position: CharacterPosition::new(4, 37)..CharacterPosition::new(4, 38),
-                                                                        expression: ExpressionItem::IntegerImmediate(2),
+                                                                        expression: ExpressionItem::NumberImmediate(Decimal128::from(2)),
                                                                     }
                                                                     .into()
                                                                 ),

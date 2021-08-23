@@ -3,6 +3,7 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::{Arc, Mutex};
 
+use dec::Decimal128;
 use once_cell::sync::Lazy;
 use uuid::Uuid;
 
@@ -12,7 +13,7 @@ use kirl_vm::bytecode::{FunctionWrapper, KirlRustFunction};
 
 enum FunctionOrChildren {
     Function(Arc<Mutex<dyn KirlRustFunction>>, Uuid, HIRType),
-    Children(HashMap<String, FunctionOrChildren>),
+    Children(HashMap<String, Vec<FunctionOrChildren>>),
 }
 
 impl Debug for FunctionOrChildren {
@@ -24,8 +25,8 @@ impl Debug for FunctionOrChildren {
     }
 }
 
-impl From<HashMap<String, FunctionOrChildren>> for FunctionOrChildren {
-    fn from(value: HashMap<String, FunctionOrChildren>) -> Self {
+impl From<HashMap<String, Vec<FunctionOrChildren>>> for FunctionOrChildren {
+    fn from(value: HashMap<String, Vec<FunctionOrChildren>>) -> Self {
         FunctionOrChildren::Children(value)
     }
 }
@@ -41,19 +42,12 @@ where
     FunctionWrapper<Args, Result, F>: KirlRustFunction + 'static,
 {
     fn from(function: FunctionWrapper<Args, Result, F>) -> Self {
-        FunctionOrChildren::Function(
-            Arc::new(Mutex::new(function)),
-            Uuid::new_v4(),
-            HIRType::Function {
-                arguments: vec![HIRType::Named { path: vec!["String".to_string()], generics_arguments: Vec::new() }],
-                result: Box::new(HIRType::None),
-            },
-        )
+        FunctionOrChildren::Function(Arc::new(Mutex::new(function)), Uuid::new_v4(), FunctionWrapper::<Args, Result, F>::static_type().into_owned().into())
     }
 }
 
 #[derive(Debug)]
-pub struct KirlStdLib(HashMap<String, FunctionOrChildren>);
+pub struct KirlStdLib(HashMap<String, Vec<FunctionOrChildren>>);
 
 impl KirlNameResolver for FunctionOrChildren {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(uuid::Uuid, HIRType)> {
@@ -85,14 +79,14 @@ impl<'a> IntoIterator for &'a KirlStdLib {
             match item {
                 FunctionOrChildren::Function(function, id, _) => result.push((*id, Arc::clone(function))),
                 FunctionOrChildren::Children(children) => {
-                    for item in children.values() {
+                    for item in children.values().flatten() {
                         add(item, result);
                     }
                 }
             }
         }
         let mut result = Vec::new();
-        for item in self.0.values() {
+        for item in self.0.values().flatten() {
             add(item, &mut result);
         }
         result.into_iter()
@@ -106,11 +100,13 @@ macro_rules! count {
 }
 
 macro_rules! map {
-    ($($name:ident : $value:expr),*)=>{
+    ($($name:ident : $value:expr),* $(,)?)=>{
         {
-            let mut result = std::collections::HashMap::<std::string::String, _>::with_capacity(count!($($name),*));
+            let mut result = std::collections::HashMap::<std::string::String, Vec<FunctionOrChildren>>::with_capacity(count!($($name),*));
             $(
-                result.insert(std::string::String::from(stringify!($name)), ($value).into());
+                result.entry(std::string::String::from(stringify!($name)))
+                    .or_default()
+                    .push(($value).into());
             )*
             result.shrink_to_fit();
             result
@@ -132,7 +128,8 @@ impl Error for NoneError {}
 static STDLIB: Lazy<Arc<Mutex<KirlStdLib>>> = Lazy::new(|| {
     Arc::new(Mutex::new(KirlStdLib(map! {
         io: map! {
-            println: FunctionWrapper::from(|s:String| Ok::<_,NoneError>(println!("{}", s)))
+            println: FunctionWrapper::from(|s:String| Ok::<_,NoneError>(println!("{}", s))),
+            println: FunctionWrapper::from(|s:Decimal128| Ok::<_,NoneError>(println!("{}", s))),
         }
     })))
 });

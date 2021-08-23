@@ -1,9 +1,9 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::num::ParseFloatError;
 use std::ops::Range;
 use std::str::FromStr;
 
+use dec::{Decimal128, ParseDecimalError};
 use parser::enum_index;
 use parser::enum_index_derive::*;
 use tokenizer::*;
@@ -44,10 +44,8 @@ pub enum Token {
     Identifier((Range<CharacterPosition>, String)),
     /// 文字列即値
     StringImmediate((Range<CharacterPosition>, String)),
-    /// 整数即値
-    IntegerImmediate((Range<CharacterPosition>, i64)),
-    /// 浮動小数点数即値
-    FloatImmediate((Range<CharacterPosition>, f64)),
+    /// 数値即値
+    NumberImmediate((Range<CharacterPosition>, Decimal128)),
     /// !
     Not(Range<CharacterPosition>),
     /// .
@@ -110,10 +108,10 @@ pub enum Token {
     MatchArrow(Range<CharacterPosition>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum TokenizeError {
     IntegerParseError { raw: String, position: Range<CharacterPosition> },
-    FloatParseError { raw: String, position: Range<CharacterPosition>, error: ParseFloatError },
+    DecimalParseError { raw: String, position: Range<CharacterPosition>, error: ParseDecimalError },
     StringParseError { raw: String, position: Range<CharacterPosition> },
     UnknownCharacter { character: char, position: CharacterPosition },
 }
@@ -127,7 +125,7 @@ impl Display for TokenizeError {
 impl Error for TokenizeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            TokenizeError::FloatParseError { error, .. } => Some(error),
+            TokenizeError::DecimalParseError { error, .. } => Some(error),
             _ => None,
         }
     }
@@ -161,16 +159,9 @@ pub fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (Ch
                 })
                 .map(|s| Some(Token::StringImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), s))))
         })
-        .pattern("0b[01_]*[01]|0o[0-7_]*[0-7]|0d[0-9_]*[0-9]|0x[0-9a-fA-F_]*[0-9a-fA-F]|[0-9]|[0-9][0-9_]*[0-9]", |s, v| {
-            parse_integer(s)
-                .ok_or_else(|| TokenizeError::IntegerParseError {
-                    raw: s.to_string(),
-                    position: v.first().unwrap().0..v.last().unwrap().0.next(),
-                })
-                .map(|i| Some(Token::IntegerImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), i))))
-        })
+        .pattern("0b[01_]*[01]|0o[0-7_]*[0-7]|0d[0-9_]*[0-9]|0x[0-9a-fA-F_]*[0-9a-fA-F]|[0-9]|[0-9][0-9_]*[0-9]", |s, v| Ok(Some(Token::NumberImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), parse_integer(s))))))
         .pattern("([0-9][0-9_]*[0-9]|[0-9]|([0-9][0-9_]*)?\\.[0-9_]*[0-9])([eE][\\+\\-]?[0-9_]*[0-9])?", |s, v| {
-            f64::from_str(&s.replace("_", "")).map(|f| Some(Token::FloatImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), f)))).map_err(|e| TokenizeError::FloatParseError {
+            Decimal128::from_str(&s.replace("_", "")).map(|f| Some(Token::NumberImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), f)))).map_err(|e| TokenizeError::DecimalParseError {
                 raw: s.to_string(),
                 position: v.first().unwrap().0..v.last().unwrap().0.next(),
                 error: e,
@@ -212,7 +203,7 @@ pub fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (Ch
     tokenizer
 }
 
-fn parse_integer(s: &str) -> Option<i64> {
+fn parse_integer(s: &str) -> Decimal128 {
     let s = s.replace("_", "");
     let (s, radix) = if let Some(s) = s.strip_prefix("0b") {
         (s, 2)
@@ -225,7 +216,8 @@ fn parse_integer(s: &str) -> Option<i64> {
     } else {
         (s.as_str(), 10)
     };
-    s.chars().fold(Some(0), |acc, c| acc?.checked_mul(radix)?.checked_add(c.to_digit(radix as u32).expect("正規表現でチェックしてるのであんりーちゃぶる") as i64))
+    let dec_radix = Decimal128::from(radix);
+    s.chars().fold(Decimal128::ZERO, |acc, c| acc * dec_radix + Decimal128::from(c.to_digit(radix as u32).expect("正規表現でチェックしてるのであんりーちゃぶる")))
 }
 
 fn parse_string_literal(s: &str) -> Option<String> {
@@ -260,9 +252,10 @@ fn parse_string_literal(s: &str) -> Option<String> {
 mod tests {
     use std::str::FromStr;
 
+    use dec::Decimal128;
     use tokenizer::Tokenize;
 
-    use crate::kirl_tokenizer::{get_tokenizer, CharacterPosition, Token, TokenizeError};
+    use crate::kirl_tokenizer::{get_tokenizer, CharacterPosition, Token};
 
     #[test]
     fn test_tokenize() {
@@ -402,7 +395,7 @@ test2 */
                 Ok(None),
                 Ok(None),
                 Ok(None),
-                Ok(None)
+                Ok(None),
             ]
         );
         assert_eq!(tokenize("a"), vec![Ok(Some(Token::Identifier((new(0, 0)..new(0, 1), "a".to_string()))))]);
@@ -413,57 +406,28 @@ test2 */
         assert_eq!(tokenize(r##""abcd1234_*`{}-^=~|<>?_,./""##), vec![Ok(Some(Token::StringImmediate((new(0, 0)..new(0, 27), "abcd1234_*`{}-^=~|<>?_,./".to_string()))))]);
         assert_eq!(tokenize(r#""\\ \" \n \t \x41 \u{beef}""#), vec![Ok(Some(Token::StringImmediate((new(0, 0)..new(0, 27), "\\ \" \n \t \x41 \u{beef}".to_string()))))]);
 
-        assert_eq!(tokenize("0"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 1), 0))))]);
-        assert_eq!(tokenize("0b0"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 3), 0))))]);
-        assert_eq!(tokenize("0o0"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 3), 0))))]);
-        assert_eq!(tokenize("0d0"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 3), 0))))]);
-        assert_eq!(tokenize("0x0"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 3), 0))))]);
-        assert_ne!(tokenize("_0"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 2), 0))))]);
-        assert_eq!(tokenize("12"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 2), 12))))]);
-        assert_eq!(tokenize("0b10"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 4), 0b10))))]);
-        assert_eq!(tokenize("0o12"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 4), 0o12))))]);
-        assert_eq!(tokenize("0d12"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 4), 12))))]);
-        assert_eq!(tokenize("0x12"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 4), 0x12))))]);
-        assert_eq!(tokenize("123"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 3), 123))))]);
-        assert_eq!(tokenize("0b101"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 5), 0b101))))]);
-        assert_eq!(tokenize("0o123"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 5), 0o123))))]);
-        assert_eq!(tokenize("0d123"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 5), 123))))]);
-        assert_eq!(tokenize("0x123"), vec![Ok(Some(Token::IntegerImmediate((new(0, 0)..new(0, 5), 0x123))))]);
-        assert_eq!(tokenize("9223372036854775808"), vec![Err(TokenizeError::IntegerParseError { raw: "9223372036854775808".to_string(), position: new(0, 0)..new(0, 19) })]);
-        assert_eq!(
-            tokenize("0b1000_0000__0000_0000___0000_0000__0000_0000____0000_0000__0000_0000___0000_0000__0000_0000"),
-            vec![Err(TokenizeError::IntegerParseError {
-                raw: "0b1000_0000__0000_0000___0000_0000__0000_0000____0000_0000__0000_0000___0000_0000__0000_0000".to_string(),
-                position: new(0, 0)..new(0, 92)
-            })]
-        );
-        assert_eq!(
-            tokenize("0o1000000000000000000000"),
-            vec![Err(TokenizeError::IntegerParseError {
-                raw: "0o1000000000000000000000".to_string(),
-                position: new(0, 0)..new(0, 24),
-            })]
-        );
-        assert_eq!(
-            tokenize("0d9223372036854775808"),
-            vec![Err(TokenizeError::IntegerParseError {
-                raw: "0d9223372036854775808".to_string(),
-                position: new(0, 0)..new(0, 21),
-            })]
-        );
-        assert_eq!(
-            tokenize("0x8000_0000_0000_0000"),
-            vec![Err(TokenizeError::IntegerParseError {
-                raw: "0x8000_0000_0000_0000".to_string(),
-                position: new(0, 0)..new(0, 21),
-            })]
-        );
+        assert_eq!(tokenize("0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 1), Decimal128::from(0)))))]);
+        assert_eq!(tokenize("0b0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 3), Decimal128::from(0)))))]);
+        assert_eq!(tokenize("0o0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 3), Decimal128::from(0)))))]);
+        assert_eq!(tokenize("0d0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 3), Decimal128::from(0)))))]);
+        assert_eq!(tokenize("0x0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 3), Decimal128::from(0)))))]);
+        assert_ne!(tokenize("_0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 2), Decimal128::from(0)))))]);
+        assert_eq!(tokenize("12"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 2), Decimal128::from(12)))))]);
+        assert_eq!(tokenize("0b10"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 4), Decimal128::from(0b10)))))]);
+        assert_eq!(tokenize("0o12"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 4), Decimal128::from(0o12)))))]);
+        assert_eq!(tokenize("0d12"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 4), Decimal128::from(12)))))]);
+        assert_eq!(tokenize("0x12"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 4), Decimal128::from(0x12)))))]);
+        assert_eq!(tokenize("123"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 3), Decimal128::from(123)))))]);
+        assert_eq!(tokenize("0b101"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from(0b101)))))]);
+        assert_eq!(tokenize("0o123"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from(0o123)))))]);
+        assert_eq!(tokenize("0d123"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from(123)))))]);
+        assert_eq!(tokenize("0x123"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from(0x123)))))]);
 
-        assert_eq!(tokenize(".0"), vec![Ok(Some(Token::FloatImmediate((new(0, 0)..new(0, 2), 0.))))]);
-        assert_eq!(tokenize(".1e1"), vec![Ok(Some(Token::FloatImmediate((new(0, 0)..new(0, 4), f64::from_str(".1e1").unwrap()))))]);
-        assert_eq!(tokenize(".1e+1"), vec![Ok(Some(Token::FloatImmediate((new(0, 0)..new(0, 5), f64::from_str(".1e+1").unwrap()))))]);
-        assert_eq!(tokenize(".1e-1"), vec![Ok(Some(Token::FloatImmediate((new(0, 0)..new(0, 5), f64::from_str(".1e-1").unwrap()))))]);
-        assert_eq!(tokenize("1E2"), vec![Ok(Some(Token::FloatImmediate((new(0, 0)..new(0, 3), f64::from_str("1E2").unwrap()))))]);
-        assert_eq!(tokenize("1E400"), vec![Ok(Some(Token::FloatImmediate((new(0, 0)..new(0, 5), f64::from_str("1E400").unwrap()))))]);
+        assert_eq!(tokenize(".0"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 2), Decimal128::from(0)))))]);
+        assert_eq!(tokenize(".1e1"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 4), Decimal128::from_str(".1e1").unwrap()))))]);
+        assert_eq!(tokenize(".1e+1"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from_str(".1e+1").unwrap()))))]);
+        assert_eq!(tokenize(".1e-1"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from_str(".1e-1").unwrap()))))]);
+        assert_eq!(tokenize("1E2"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 3), Decimal128::from_str("1E2").unwrap()))))]);
+        assert_eq!(tokenize("1E400"), vec![Ok(Some(Token::NumberImmediate((new(0, 0)..new(0, 5), Decimal128::from_str("1E400").unwrap()))))]);
     }
 }

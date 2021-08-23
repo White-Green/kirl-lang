@@ -7,17 +7,17 @@ use std::ops::DerefMut;
 use uuid::Uuid;
 
 use kirl_parser::KirlParser;
-use kirl_semantic_analyzer::{collect_top_level_item_with_imports, HIRStatementList, KirlTopLevelItems};
 use kirl_semantic_analyzer::name_resolver::resolve_statements;
 use kirl_semantic_analyzer::syntax_tree_to_hir::analysis_statements;
 use kirl_semantic_analyzer::type_checker::decision_type;
+use kirl_semantic_analyzer::{collect_top_level_item_with_imports, HIRStatementList, KirlTopLevelItems};
 use kirl_stdlib::get_stdlib;
 use kirl_vm::bytecode::KirlVMExecutable;
 use kirl_vm::lir::LIRStatementList;
 
 pub trait KirlFileResolver {
     type ResolveError: Error + Send + Sync + 'static;
-    fn resolve_file_by_path(&mut self, path: &[String]) -> Result<Cow<str>, Self::ResolveError>;
+    fn resolve_file_by_path(&mut self, path: &[String]) -> Result<Cow<str>, Self::ResolveError>; //TODO:このpathはimpl AsRef<Path>とかにしたほうが便利そう(ファイルの読み込み用だし)
 }
 
 pub fn compile(file_resolver: &mut impl KirlFileResolver, entry_point: &[String]) -> Result<KirlVMExecutable, anyhow::Error> {

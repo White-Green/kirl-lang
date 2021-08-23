@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+dec = "0.4.5"
 tokenizer = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "4288db5ef6eb7952eac800f1216872873f5eb7c6" }
 #tokenizer = { path = "../../Yet-Another-Rust-Parser/tokenizer" }
 parser = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "4288db5ef6eb7952eac800f1216872873f5eb7c6" }

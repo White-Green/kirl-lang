@@ -8,6 +8,7 @@ use parser_generator::parser;
 
 use crate::kirl_tokenizer::Token;
 use crate::CharacterPosition;
+use dec::Decimal128;
 
 #[cfg(test)]
 mod tests;
@@ -168,8 +169,7 @@ pub struct Expression {
 pub enum ExpressionItem {
     AccessVariable(Path),
     StringImmediate(String),
-    IntegerImmediate(i64),
-    FloatImmediate(f64),
+    NumberImmediate(Decimal128),
     AccessMember(Box<Expression>, String),
     CallFunction(Option<Box<Expression>>, Option<Path>, Vec<Expression>),
     Indexer(Box<Expression>, Box<Expression>),
@@ -217,7 +217,7 @@ pub enum ExpressionItem {
 
 impl Default for ExpressionItem {
     fn default() -> Self {
-        ExpressionItem::IntegerImmediate(Default::default())
+        ExpressionItem::NumberImmediate(Default::default())
     }
 }
 
@@ -345,8 +345,7 @@ parser! {
         Continue(Default::default(),),
         Identifier(Default::default(),),
         StringImmediate(Default::default(),),
-        IntegerImmediate(Default::default(),),
-        FloatImmediate(Default::default(),),
+        NumberImmediate(Default::default(),),
         Not(Default::default(),),
         Dot(Default::default(),),
         Comma(Default::default(),),
@@ -752,13 +751,9 @@ parser! {
         (|list| if let [Terminal(Token::StringImmediate((position, value)))] = list {
             Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::StringImmediate(value.clone()) }))
         } else { unreachable!() })
-    <Expression8>::=([IntegerImmediate])
-        (|list| if let [Terminal(Token::IntegerImmediate((position, value)))] = list {
-            Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::IntegerImmediate(*value) }))
-        } else { unreachable!() })
-    <Expression8>::=([FloatImmediate])
-        (|list| if let [Terminal(Token::FloatImmediate((position, value)))] = list {
-            Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::FloatImmediate(*value) }))
+    <Expression8>::=([NumberImmediate])
+        (|list| if let [Terminal(Token::NumberImmediate((position, value)))] = list {
+            Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::NumberImmediate(*value) }))
         } else { unreachable!() })
     <Expression8>::=(<Expression8> [Dot] <FullPath> [RoundBracketOpen] [RoundBracketClose])
         (|list| if let [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] = list {

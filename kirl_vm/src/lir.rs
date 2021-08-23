@@ -1,15 +1,16 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+use dec::Decimal128;
 use uuid::Uuid;
 
 use kirl_semantic_analyzer::{HIRExpression, HIRStatement, HIRStatementList, HIRType, Immediate, ReferenceAccess, Variable};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum LIRType {
-    None,
     Unreachable,
     Named { path: Vec<String>, generics_arguments: Vec<LIRType> },
     Tuple(Vec<LIRType>),
@@ -17,6 +18,96 @@ pub enum LIRType {
     Function { arguments: Vec<LIRType>, result: Box<LIRType> },
     AnonymousStruct(BTreeMap<String, LIRType>),
     Or(Vec<LIRType>),
+}
+
+impl From<LIRType> for HIRType {
+    fn from(value: LIRType) -> Self {
+        match value {
+            LIRType::Unreachable => HIRType::Unreachable,
+            LIRType::Named { path, generics_arguments } => HIRType::Named {
+                path,
+                generics_arguments: generics_arguments.into_iter().map(Into::into).collect(),
+            },
+            LIRType::Tuple(items) => HIRType::Tuple(items.into_iter().map(Into::into).collect()),
+            LIRType::Array(item) => HIRType::Array(Box::new((*item).into())),
+            LIRType::Function { arguments, result } => HIRType::Function {
+                arguments: arguments.into_iter().map(Into::into).collect(),
+                result: Box::new((*result).into()),
+            },
+            LIRType::AnonymousStruct(items) => HIRType::AnonymousStruct(items.into_iter().map(|(k, v)| (k, v.into())).collect()),
+            LIRType::Or(items) => HIRType::Or(items.into_iter().map(Into::into).collect()),
+        }
+    }
+}
+
+impl LIRType {
+    pub fn is_a(&self, rhs: &Self) -> bool {
+        match (self, rhs) {
+            (LIRType::Named { path: path1, generics_arguments: arg1 }, LIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| ty1.is_a(ty2)),
+            (LIRType::Tuple(items1), LIRType::Tuple(items2)) => items1.len() == items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
+            (LIRType::Array(t1), LIRType::Array(t2)) => t1.is_a(t2),
+            (LIRType::Function { arguments: arg1, result: res1 }, LIRType::Function { arguments: arg2, result: res2 }) => arg1.len() == arg2.len() && arg2.iter().zip(arg1).all(|(ty1, ty2)| ty1.is_a(ty2)) && res1.is_a(res2),
+            (LIRType::AnonymousStruct(members1), LIRType::AnonymousStruct(members2)) => members2.iter().all(|(k, v2)| members1.get(k).map_or(false, |v1| v1.is_a(v2))),
+            (LIRType::Or(items1), ty2) => items1.iter().all(|ty1| ty1.is_a(ty2)),
+            (ty1, LIRType::Or(items2)) => items2.iter().any(|ty2| ty1.is_a(ty2)),
+            _ => false,
+        }
+    }
+
+    pub fn normalize(&mut self) {
+        match self {
+            LIRType::Tuple(items) => items.iter_mut().for_each(LIRType::normalize),
+            LIRType::Array(item) => item.normalize(),
+            LIRType::Function { arguments, result } => {
+                arguments.iter_mut().for_each(LIRType::normalize);
+                result.normalize();
+            }
+            LIRType::AnonymousStruct(members) => members.values_mut().for_each(LIRType::normalize),
+            LIRType::Or(items) => {
+                items.iter_mut().for_each(LIRType::normalize);
+                *items = items.drain(..).flat_map(|ty| if let LIRType::Or(items) = ty { items } else { vec![ty] }).collect();
+                items.sort();
+                items.dedup();
+                if items.len() > 1 {
+                    items.retain(|ty| ty != &LIRType::Unreachable);
+                }
+                if items.len() == 1 {
+                    *self = items.pop().unwrap();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn into_normalized(mut self) -> LIRType {
+        self.normalize();
+        self
+    }
+
+    pub fn member_type(&self, member_name: &str) -> Option<Cow<LIRType>> {
+        match self {
+            LIRType::AnonymousStruct(members) => members.get(member_name).map(Cow::Borrowed),
+            LIRType::Or(items) => {
+                let mut result = Vec::with_capacity(items.len());
+                for ty in items.iter().map(|ty| ty.member_type(member_name)) {
+                    match ty {
+                        None => return None,
+                        Some(ty) => result.push(ty.into_owned()),
+                    }
+                }
+                Some(Cow::Owned(LIRType::Or(result)))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn has_member(&self, member_name: &str) -> bool {
+        match self {
+            LIRType::AnonymousStruct(members) => members.contains_key(member_name),
+            LIRType::Or(items) => items.iter().all(|ty| ty.has_member(member_name)),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -40,7 +131,6 @@ impl TryFrom<HIRType> for LIRType {
         ty.normalize();
         match ty {
             HIRType::Infer => Err(LIRTypeConvertError::UnSupportedType("Infer")),
-            HIRType::None => Ok(LIRType::None),
             HIRType::Unreachable => Ok(LIRType::Unreachable),
             HIRType::Named { path, generics_arguments } => {
                 let mut result_generics_arguments = Vec::with_capacity(generics_arguments.len());
@@ -112,7 +202,7 @@ impl From<LIRInstruction> for LIRStatement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LIRInstruction {
     LoadImmediateString(String),
-    LoadImmediateNumber(()),
+    LoadImmediateNumber(Decimal128),
     LoadNamedValue(Uuid),
     Load(usize),
     Store(usize),
@@ -176,12 +266,7 @@ fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRS
                 HIRStatement::Binding { variable_id, expression, .. } => {
                     match expression {
                         HIRExpression::Immediate(value) => match value {
-                            Immediate::Integer(_) => {
-                                todo!()
-                            }
-                            Immediate::Float(_) => {
-                                todo!()
-                            }
+                            Immediate::Number(value) => result.push(LIRInstruction::LoadImmediateNumber(value).into()),
                             Immediate::String(value) => result.push(LIRInstruction::LoadImmediateString(value).into()),
                         },
                         HIRExpression::CallFunction { function, arguments } => {
@@ -308,5 +393,7 @@ fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRS
     }
     let mut result = Vec::new();
     convert_list(statements, &mut result, &mut 0)?;
+    result.push(LIRInstruction::ConstructTuple(0).into());
+    result.push(LIRInstruction::Return.into());
     Ok(result)
 }

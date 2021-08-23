@@ -6,6 +6,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+dec = "0.4.5"
 uuid = { version = "0.8.2", features = ["v4"] }
 once_cell = "1.8.0"
 kirl_semantic_analyzer = { path = "../kirl_semantic_analyzer" } #TODO:このへん単一crateにまとめて外に出したいね

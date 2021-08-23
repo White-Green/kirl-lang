@@ -44,9 +44,14 @@ pub fn decision_type(mut statements: Vec<HIRStatement<Vec<(Uuid, HIRType)>>>) ->
                     types.resize_with(*variable_id + 1, || HIRType::Infer);
                     let (result_type, reachable) = match expression {
                         HIRExpression::Immediate(value) => match value {
-                            Immediate::Integer(_) => return Err(DecisionTypeError::UnImplementedFeature("Integer immediate")),
-                            Immediate::Float(_) => return Err(DecisionTypeError::UnImplementedFeature("Float immediate")),
-                            Immediate::String(_value) => {
+                            Immediate::Number(_) => {
+                                let type_number = HIRType::Named { path: vec!["Number".to_string()], generics_arguments: Vec::new() };
+                                if !variable_type.is_a(&type_number) {
+                                    return Err(DecisionTypeError::TypeMismatched { expected: type_number, actual: variable_type.clone() });
+                                }
+                                (type_number, Reachable::Reachable)
+                            }
+                            Immediate::String(_) => {
                                 let type_string = HIRType::Named { path: vec!["String".to_string()], generics_arguments: Vec::new() };
                                 if !variable_type.is_a(&type_string) {
                                     return Err(DecisionTypeError::TypeMismatched { expected: type_string, actual: variable_type.clone() });
@@ -179,7 +184,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<Vec<(Uuid, HIRType)>>>) ->
                         HIRExpression::IfLet { .. } => return Err(DecisionTypeError::UnImplementedFeature("type checking for if-var expression")),
                         HIRExpression::Loop(inner) => {
                             decision_type_inner(inner, types)?;
-                            (HIRType::None, Reachable::Reachable)
+                            (HIRType::Tuple(Vec::new()), Reachable::Reachable)
                         }
                         HIRExpression::Assign { variable, value } => {
                             let value_type = match value {

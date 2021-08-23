@@ -9,12 +9,6 @@ pub trait KirlNameResolver {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)>;
 }
 
-impl<T: KirlNameResolver> KirlNameResolver for &mut T {
-    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
-        (*self).resolve(full_path)
-    }
-}
-
 impl<R1> KirlNameResolver for (R1,)
 where
     R1: KirlNameResolver,
@@ -89,22 +83,25 @@ where
     }
 }
 
-impl<R: DerefMut> KirlNameResolver for [R]
-where
-    R::Target: KirlNameResolver,
-{
+impl<R: KirlNameResolver> KirlNameResolver for [R] {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
         self.iter_mut().flat_map(|resolver| resolver.resolve(full_path)).collect()
     }
 }
 
-impl<R: KirlNameResolver> KirlNameResolver for HashMap<String, R> {
+impl<R: DerefMut> KirlNameResolver for HashMap<String, R>
+where
+    R::Target: KirlNameResolver,
+{
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
         full_path.first().and_then(|key| self.get_mut(key)).map(|resolver| resolver.resolve(&full_path[1..])).unwrap_or_default()
     }
 }
 
-impl<R: KirlNameResolver> KirlNameResolver for BTreeMap<String, R> {
+impl<R: DerefMut> KirlNameResolver for BTreeMap<String, R>
+where
+    R::Target: KirlNameResolver,
+{
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
         full_path.first().and_then(|key| self.get_mut(key)).map(|resolver| resolver.resolve(&full_path[1..])).unwrap_or_default()
     }
