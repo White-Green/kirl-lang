@@ -128,9 +128,30 @@ impl Error for NoneError {}
 static STDLIB: Lazy<Arc<Mutex<KirlStdLib>>> = Lazy::new(|| {
     Arc::new(Mutex::new(KirlStdLib(map! {
         io: map! {
-            println: FunctionWrapper::from(|s:String| Ok::<_,NoneError>(println!("{}", s))),
-            println: FunctionWrapper::from(|s:Decimal128| Ok::<_,NoneError>(println!("{}", s))),
-        }
+            print: FunctionWrapper::from(|s: String| Ok::<_, NoneError>(print!("{}", s))),
+            print: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(print!("{}", s))),
+            print: FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(print!("{}", s))),
+            println: FunctionWrapper::from(|s: String| Ok::<_, NoneError>(println!("{}", s))),
+            println: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(println!("{}", s))),
+            println: FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(println!("{}", s))),
+        },
+        bool: map!{
+            _not: FunctionWrapper::from(|a: bool| Ok::<_, NoneError>(!a)),
+            _or: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a | b)),
+            _and: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a & b)),
+            _xor: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a ^ b)),
+            _eq: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a == b)),
+        },
+        num: map! {
+            _add: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a + b)),
+            _sub: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a - b)),
+            _mul: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a * b)),
+            _div: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a / b)),
+            _rem: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a % b)),
+            _eq: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a == b)),
+            _gt: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a > b)),
+            _neg: FunctionWrapper::from(|a: Decimal128| Ok::<_, NoneError>(-a)),
+        },
     })))
 });
 

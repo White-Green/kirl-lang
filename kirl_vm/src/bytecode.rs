@@ -48,7 +48,7 @@ impl KirlByteCode {
 
     pub fn new_signed(opcode: KirlByteCodeOpcode, operand: i32) -> Self {
         let operand = operand as u32;
-        assert_eq!(((operand >> 24) ^ (operand >> 16)) & 0xff, 0b1000_0000);
+        assert_eq!(((operand >> 24) ^ (operand >> 16)) & 0b1000_0000, 0);
         Self::new(opcode, operand)
     }
 
@@ -120,11 +120,12 @@ macro_rules! impl_fn {
     }
 }
 
-fn downcast<T: ?Sized + 'static, U: Sized + 'static>(value: Arc<T>) -> Result<Arc<U>, Arc<T>> {
-    if value.type_id() == TypeId::of::<Arc<T>>() {
+fn downcast<U: Sized + 'static>(value: Arc<RwLock<dyn KirlVMValueCloneable>>) -> Result<Arc<RwLock<U>>, Arc<RwLock<dyn KirlVMValueCloneable>>> {
+    let id = <dyn KirlVMValueCloneable>::type_id(&*value.read().unwrap());
+    if id == TypeId::of::<U>() {
         unsafe {
             let raw = Arc::into_raw(value);
-            Ok(Arc::from_raw(raw as *const U))
+            Ok(Arc::from_raw(raw as *const RwLock<U>))
         }
     } else {
         Err(value)

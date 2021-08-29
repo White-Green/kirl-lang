@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter};
 use dec::Decimal128;
 use uuid::Uuid;
 
-use kirl_semantic_analyzer::{HIRExpression, HIRStatement, HIRStatementList, HIRType, Immediate, ReferenceAccess, Variable};
+use kirl_semantic_analyzer::{HIRExpression, HIRStatement, HIRType, Immediate, ReferenceAccess, Variable};
 
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum LIRType {
@@ -43,6 +43,8 @@ impl From<LIRType> for HIRType {
 impl LIRType {
     pub fn is_a(&self, rhs: &Self) -> bool {
         match (self, rhs) {
+            (LIRType::Unreachable, _) => true,
+            (_, LIRType::Unreachable) => false,
             (LIRType::Named { path: path1, generics_arguments: arg1 }, LIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (LIRType::Tuple(items1), LIRType::Tuple(items2)) => items1.len() == items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (LIRType::Array(t1), LIRType::Array(t2)) => t1.is_a(t2),
@@ -246,19 +248,19 @@ impl From<LIRTypeConvertError> for LIRStatementListConvertError {
     }
 }
 
-impl TryFrom<HIRStatementList<(Uuid, HIRType)>> for LIRStatementList {
-    type Error = LIRStatementListConvertError;
-    fn try_from(HIRStatementList(statements): HIRStatementList<(Uuid, HIRType)>) -> Result<Self, Self::Error> {
-        hir_to_lir(statements).map(Into::into)
-    }
-}
+// impl TryFrom<HIRStatementList<(Uuid, HIRType)>> for LIRStatementList {
+//     type Error = LIRStatementListConvertError;
+//     fn try_from(HIRStatementList(statements): HIRStatementList<(Uuid, HIRType)>) -> Result<Self, Self::Error> {
+//         hir_to_lir(statements).map(Into::into)
+//     }
+// }
 
-fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRStatement>, LIRStatementListConvertError> {
+pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count: usize) -> Result<LIRStatementList, LIRStatementListConvertError> {
     fn convert_list(statements: impl IntoIterator<Item = HIRStatement<(Uuid, HIRType)>>, result: &mut Vec<LIRStatement>, sequence: &mut usize) -> Result<(), LIRStatementListConvertError> {
         fn convert(statement: HIRStatement<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>, sequence: &mut usize) -> Result<(), LIRStatementListConvertError> {
             fn push_variable(variable: Variable<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>) {
                 match variable {
-                    Variable::Named((id, _)) => result.push(LIRInstruction::LoadNamedValue(id).into()),
+                    Variable::Named(_, (id, _)) => result.push(LIRInstruction::LoadNamedValue(id).into()),
                     Variable::Unnamed(id) => result.push(LIRInstruction::Load(id).into()),
                 }
             }
@@ -271,7 +273,7 @@ fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRS
                         },
                         HIRExpression::CallFunction { function, arguments } => {
                             let function = match function {
-                                Variable::Named((id, _)) => id,
+                                Variable::Named(_, (id, _)) => id,
                                 Variable::Unnamed(_) => todo!(),
                             };
                             for variable in arguments.into_iter().rev() {
@@ -336,7 +338,7 @@ fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRS
                             ReferenceAccess::Variable(dest) => {
                                 push_variable(value, result);
                                 match dest {
-                                    Variable::Named(_) => todo!(),
+                                    Variable::Named(_, _) => todo!(),
                                     Variable::Unnamed(dest) => result.push(LIRInstruction::Store(dest).into()),
                                 }
                             }
@@ -372,9 +374,7 @@ fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRS
                     result.push(LIRInstruction::Store(variable_id).into());
                 }
                 HIRStatement::Return(value) => {
-                    if let Some(value) = value {
-                        push_variable(value, result);
-                    }
+                    push_variable(value, result);
                     result.push(LIRInstruction::Return.into());
                 }
                 HIRStatement::Continue(_label) => {
@@ -392,8 +392,11 @@ fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>) -> Result<Vec<LIRS
         Ok(())
     }
     let mut result = Vec::new();
+    for i in 0..argument_count {
+        result.push(LIRInstruction::Store(i).into());
+    }
     convert_list(statements, &mut result, &mut 0)?;
     result.push(LIRInstruction::ConstructTuple(0).into());
     result.push(LIRInstruction::Return.into());
-    Ok(result)
+    Ok(result.into())
 }

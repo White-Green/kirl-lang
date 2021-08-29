@@ -108,6 +108,60 @@ pub enum Token {
     MatchArrow(Range<CharacterPosition>),
 }
 
+impl Token {
+    pub fn get_position(&self) -> &Range<CharacterPosition> {
+        match self {
+            Token::Import(range) => range,
+            Token::Fn(range) => range,
+            Token::Struct(range) => range,
+            Token::Let(range) => range,
+            Token::Var(range) => range,
+            Token::If(range) => range,
+            Token::Else(range) => range,
+            Token::Match(range) => range,
+            Token::For(range) => range,
+            Token::In(range) => range,
+            Token::While(range) => range,
+            Token::Return(range) => range,
+            Token::Break(range) => range,
+            Token::Continue(range) => range,
+            Token::Identifier((range, _)) => range,
+            Token::StringImmediate((range, _)) => range,
+            Token::NumberImmediate((range, _)) => range,
+            Token::Not(range) => range,
+            Token::Dot(range) => range,
+            Token::Comma(range) => range,
+            Token::Sharp(range) => range,
+            Token::DoubleColon(range) => range,
+            Token::Colon(range) => range,
+            Token::Semicolon(range) => range,
+            Token::GreaterThan(range) => range,
+            Token::LessThan(range) => range,
+            Token::GreaterOrEqual(range) => range,
+            Token::LessOrEqual(range) => range,
+            Token::Assign(range) => range,
+            Token::Equals(range) => range,
+            Token::NotEquals(range) => range,
+            Token::Add(range) => range,
+            Token::Sub(range) => range,
+            Token::Mul(range) => range,
+            Token::Div(range) => range,
+            Token::Rem(range) => range,
+            Token::And(range) => range,
+            Token::Or(range) => range,
+            Token::Xor(range) => range,
+            Token::RoundBracketOpen(range) => range,
+            Token::RoundBracketClose(range) => range,
+            Token::SquareBracketOpen(range) => range,
+            Token::SquareBracketClose(range) => range,
+            Token::WaveBracketOpen(range) => range,
+            Token::WaveBracketClose(range) => range,
+            Token::FunctionArrow(range) => range,
+            Token::MatchArrow(range) => range,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum TokenizeError {
     IntegerParseError { raw: String, position: Range<CharacterPosition> },

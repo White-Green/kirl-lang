@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::ops::Range;
 
 use once_cell::unsync::OnceCell;
 use parser::{LR1Parser, Parse, ParseError};
@@ -37,15 +38,25 @@ impl CharacterPosition {
     }
 }
 
+impl Display for CharacterPosition {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let CharacterPosition { line, column } = self;
+        write!(f, "Line:{},position:{}", line + 1, column)
+    }
+}
+
 #[derive(Debug)]
 pub enum KirlParseError {
     TokenizeError(TokenizeError),
-    ParseError(ParseError),
+    ParseError(ParseError<ParseErrorDetail>),
 }
 
 impl Display for KirlParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            KirlParseError::TokenizeError(e) => Display::fmt(e, f),
+            KirlParseError::ParseError(e) => Display::fmt(e, f),
+        }
     }
 }
 
@@ -58,9 +69,26 @@ impl Error for KirlParseError {
     }
 }
 
+#[derive(Debug)]
+pub enum ParseErrorDetail {
+    SyntaxErrorAt(Range<CharacterPosition>),
+}
+
+impl Display for ParseErrorDetail {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseErrorDetail::SyntaxErrorAt(Range { start, end }) => {
+                write!(f, "Syntax Error at {} - {}", start, end)
+            }
+        }
+    }
+}
+
+impl Error for ParseErrorDetail {}
+
 pub struct KirlParser {
     tokenizer: DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)>,
-    parser: LR1Parser<Symbol, Token>,
+    parser: LR1Parser<Symbol, Token, ParseErrorDetail>,
 }
 
 impl Default for KirlParser {

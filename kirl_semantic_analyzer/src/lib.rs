@@ -4,12 +4,17 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::ops::Range;
 
+use dec::Decimal128;
 use regex::Regex;
 use uuid::Uuid;
 
-use dec::Decimal128;
 use kirl_parser::kirl_parser::{AnonymousStructType, Function, FunctionType, ImportPath, KirlTopLevelStatement, NamedType, Pattern, Statement, StatementItem, Struct, StructName, Type};
+use kirl_parser::CharacterPosition;
+
+use crate::name_resolver::ResolvedItems;
+use crate::syntax_tree_to_hir::SearchPaths;
 
 pub mod name_resolver;
 pub mod syntax_tree_to_hir;
@@ -70,7 +75,7 @@ impl<Reference> From<HIRStatementList<Reference>> for Vec<HIRStatement<Reference
 #[derive(Debug, PartialEq, Clone)]
 pub enum HIRStatement<Reference> {
     Binding { variable_id: usize, variable_type: HIRType, expression: HIRExpression<Reference> },
-    Return(Option<Variable<Reference>>),
+    Return(Variable<Reference>),
     Continue(Option<String>),
     Break(Option<String>),
 }
@@ -208,6 +213,8 @@ impl HIRType {
         match (self, rhs) {
             (HIRType::Infer, _) => true,
             (_, HIRType::Infer) => true,
+            (HIRType::Unreachable, _) => true,
+            (_, HIRType::Unreachable) => false,
             (HIRType::Named { path: path1, generics_arguments: arg1 }, HIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.len() == items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Array(t1), HIRType::Array(t2)) => t1.is_a(t2),
@@ -286,25 +293,25 @@ pub enum Immediate {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Variable<Reference> {
-    Named(Reference),
+    Named(Range<CharacterPosition>, Reference),
     Unnamed(usize),
 }
 
-impl ToString for Variable<Vec<Vec<String>>> {
+impl ToString for Variable<SearchPaths> {
     fn to_string(&self) -> String {
         match self {
-            Variable::Named(path) if path.len() == 1 => path[0].join("::"),
-            Variable::Named(paths) => format!("$either({})", paths.iter().map(|path| path.join("::")).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
+            Variable::Named(_, SearchPaths(path)) if path.len() == 1 => path[0].join("::"),
+            Variable::Named(_, SearchPaths(paths)) => format!("$either({})", paths.iter().map(|path| path.join("::")).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
             Variable::Unnamed(id) => format!("${}", id),
         }
     }
 }
 
-impl ToString for Variable<Vec<(Uuid, HIRType)>> {
+impl ToString for Variable<ResolvedItems> {
     fn to_string(&self) -> String {
         match self {
-            Variable::Named(candidate) if candidate.len() == 1 => format!("{}: {}", candidate[0].0, candidate[0].1.to_string()),
-            Variable::Named(candidates) => format!("$either({})", candidates.iter().map(|(id, ty)| format!("{}: {}", id, ty.to_string())).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
+            Variable::Named(_, ResolvedItems(_, candidate)) if candidate.len() == 1 => format!("{}: {}", candidate[0].1, candidate[0].1.to_string()),
+            Variable::Named(_, ResolvedItems(_, candidates)) => format!("$either({})", candidates.iter().map(|(_, id, ty)| format!("{}: {}", id, ty.to_string())).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
             Variable::Unnamed(id) => format!("${}", id),
         }
     }
@@ -313,7 +320,7 @@ impl ToString for Variable<Vec<(Uuid, HIRType)>> {
 impl ToString for Variable<(Uuid, HIRType)> {
     fn to_string(&self) -> String {
         match self {
-            Variable::Named((id, ty)) => format!("{}: {}", id, ty.to_string()),
+            Variable::Named(_, (id, ty)) => format!("{}: {}", id, ty.to_string()),
             Variable::Unnamed(id) => format!("${}", id),
         }
     }
@@ -444,11 +451,7 @@ where
                 format!("let ${}: {} = {};", variable_id, ToString::to_string(variable_type), ToString::to_string(expression))
             }
             HIRStatement::Return(variable) => {
-                if let Some(variable) = variable {
-                    format!("return {};", ToString::to_string(variable))
-                } else {
-                    "return;".to_string()
-                }
+                format!("return {};", ToString::to_string(variable))
             }
             HIRStatement::Continue(label) => {
                 if let Some(label) = label {
@@ -474,9 +477,6 @@ where
 {
     statements.iter().map(ToString::to_string).reduce(|a, b| format!("{}\n{}", a, b)).unwrap_or_default()
 }
-
-//TODO: 関数と構造体の名前解決　複数候補を持つ感じで
-//TODO: 型チェックと名前解決の確定
 
 #[cfg(test)]
 mod tests {

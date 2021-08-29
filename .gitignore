@@ -6,5 +6,4 @@
 !/kirl_parser
 !/kirl_semantic_analyzer
 !/kirl_stdlib
-!/tools
 !/Cargo.toml

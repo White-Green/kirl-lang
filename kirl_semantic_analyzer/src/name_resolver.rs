@@ -3,10 +3,20 @@ use std::ops::DerefMut;
 
 use uuid::Uuid;
 
+use crate::syntax_tree_to_hir::SearchPaths;
 use crate::{HIRExpression, HIRStatement, HIRType, ReferenceAccess, Variable};
+
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+pub struct ResolvedItems(pub(crate) SearchPaths, pub(crate) Vec<(Vec<String>, Uuid, HIRType)>);
 
 pub trait KirlNameResolver {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)>;
+}
+
+impl<R: KirlNameResolver> KirlNameResolver for &mut R {
+    fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
+        (*self).resolve(full_path)
+    }
 }
 
 impl<R1> KirlNameResolver for (R1,)
@@ -110,12 +120,17 @@ where
 trait Resolvable {
     type ResolveResult;
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult;
+    fn all_reference(&self) -> Vec<&[String]>;
 }
 
 impl<T: Resolvable> Resolvable for Vec<T> {
     type ResolveResult = Vec<T::ResolveResult>;
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         self.into_iter().map(|v| v.resolve(resolver)).collect()
+    }
+
+    fn all_reference(&self) -> Vec<&[String]> {
+        self.iter().flat_map(Resolvable::all_reference).collect()
     }
 }
 
@@ -125,30 +140,54 @@ impl<T: Resolvable, U: Resolvable> Resolvable for (T, U) {
         let (t, u) = self;
         (t.resolve(resolver), u.resolve(resolver))
     }
+
+    fn all_reference(&self) -> Vec<&[String]> {
+        let (t, u) = self;
+        let mut result = t.all_reference();
+        result.extend(u.all_reference());
+        result
+    }
 }
 
-impl Resolvable for Variable<Vec<Vec<String>>> {
-    type ResolveResult = Variable<Vec<(Uuid, HIRType)>>;
+impl Resolvable for Variable<SearchPaths> {
+    type ResolveResult = Variable<ResolvedItems>;
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
-            Variable::Named(paths) => Variable::Named(paths.into_iter().flat_map(|path| resolver.resolve(&path)).collect()),
+            Variable::Named(range, paths) => {
+                let reference = ResolvedItems(paths.clone(), paths.0.into_iter().flat_map(|path| std::array::IntoIter::new([path.clone()]).cycle().zip(resolver.resolve(&path)).map(|(path, (id, ty))| (path, id, ty))).collect());
+                Variable::Named(range, reference)
+            }
             Variable::Unnamed(id) => Variable::Unnamed(id),
+        }
+    }
+
+    fn all_reference(&self) -> Vec<&[String]> {
+        match self {
+            Variable::Named(_, SearchPaths(paths)) => paths.iter().map(Vec::as_slice).collect(),
+            Variable::Unnamed(_) => Vec::new(),
         }
     }
 }
 
-impl Resolvable for ReferenceAccess<Vec<Vec<String>>> {
-    type ResolveResult = ReferenceAccess<Vec<(Uuid, HIRType)>>;
+impl Resolvable for ReferenceAccess<SearchPaths> {
+    type ResolveResult = ReferenceAccess<ResolvedItems>;
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
             ReferenceAccess::Variable(variable) => ReferenceAccess::Variable(variable.resolve(resolver)),
             ReferenceAccess::Member(variable, member) => ReferenceAccess::Member(variable.resolve(resolver), member),
         }
     }
+
+    fn all_reference(&self) -> Vec<&[String]> {
+        match self {
+            ReferenceAccess::Variable(variable) => variable.all_reference(),
+            ReferenceAccess::Member(variable, _) => variable.all_reference(),
+        }
+    }
 }
 
-impl Resolvable for HIRExpression<Vec<Vec<String>>> {
-    type ResolveResult = HIRExpression<Vec<(Uuid, HIRType)>>;
+impl Resolvable for HIRExpression<SearchPaths> {
+    type ResolveResult = HIRExpression<ResolvedItems>;
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
             HIRExpression::Immediate(value) => HIRExpression::Immediate(value),
@@ -177,20 +216,67 @@ impl Resolvable for HIRExpression<Vec<Vec<String>>> {
             HIRExpression::ConstructArray(members) => HIRExpression::ConstructArray(members.resolve(resolver)),
         }
     }
-}
 
-impl Resolvable for HIRStatement<Vec<Vec<String>>> {
-    type ResolveResult = HIRStatement<Vec<(Uuid, HIRType)>>;
-    fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
+    fn all_reference(&self) -> Vec<&[String]> {
         match self {
-            HIRStatement::Binding { variable_id, variable_type, expression } => HIRStatement::Binding { variable_id, variable_type, expression: expression.resolve(resolver) },
-            HIRStatement::Return(value) => HIRStatement::Return(value.map(|value| value.resolve(resolver))),
-            HIRStatement::Continue(label) => HIRStatement::Continue(label),
-            HIRStatement::Break(label) => HIRStatement::Break(label),
+            HIRExpression::Immediate(_) => Vec::new(),
+            HIRExpression::CallFunction { function, arguments } => {
+                let mut result = function.all_reference();
+                result.extend(arguments.all_reference());
+                result
+            }
+            HIRExpression::AccessVariable(variable) => variable.all_reference(),
+            HIRExpression::AccessMember { variable, .. } => variable.all_reference(),
+            HIRExpression::If { condition, then, other } => {
+                let mut result = condition.all_reference();
+                result.extend(then.all_reference());
+                result.extend(other.all_reference());
+                result
+            }
+            HIRExpression::IfLet { condition, then, other, .. } => {
+                let mut result = condition.all_reference();
+                result.extend(then.all_reference());
+                result.extend(other.all_reference());
+                result
+            }
+            HIRExpression::Loop(statements) => statements.all_reference(),
+            HIRExpression::Assign { variable, value } => {
+                let mut result = variable.all_reference();
+                result.extend(value.all_reference());
+                result
+            }
+            HIRExpression::ConstructStruct(members) => members.values().flat_map(Resolvable::all_reference).collect(),
+            HIRExpression::ConstructTuple(items) => items.all_reference(),
+            HIRExpression::ConstructArray(items) => items.all_reference(),
         }
     }
 }
 
-pub fn resolve_statements(statements: Vec<HIRStatement<Vec<Vec<String>>>>, resolver: &mut impl KirlNameResolver) -> Vec<HIRStatement<Vec<(Uuid, HIRType)>>> {
+impl Resolvable for HIRStatement<SearchPaths> {
+    type ResolveResult = HIRStatement<ResolvedItems>;
+    fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
+        match self {
+            HIRStatement::Binding { variable_id, variable_type, expression } => HIRStatement::Binding { variable_id, variable_type, expression: expression.resolve(resolver) },
+            HIRStatement::Return(value) => HIRStatement::Return(value.resolve(resolver)),
+            HIRStatement::Continue(label) => HIRStatement::Continue(label),
+            HIRStatement::Break(label) => HIRStatement::Break(label),
+        }
+    }
+
+    fn all_reference(&self) -> Vec<&[String]> {
+        match self {
+            HIRStatement::Binding { expression, .. } => expression.all_reference(),
+            HIRStatement::Return(value) => value.all_reference(),
+            HIRStatement::Continue(_) => Vec::new(),
+            HIRStatement::Break(_) => Vec::new(),
+        }
+    }
+}
+
+pub fn resolve_statements(statements: Vec<HIRStatement<SearchPaths>>, resolver: &mut impl KirlNameResolver) -> Vec<HIRStatement<ResolvedItems>> {
     statements.resolve(resolver)
+}
+
+pub fn statement_references(statements: &Vec<HIRStatement<SearchPaths>>) -> Vec<&[String]> {
+    statements.all_reference()
 }

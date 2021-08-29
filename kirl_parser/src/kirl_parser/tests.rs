@@ -74,8 +74,8 @@ struct MyStruct::<T> {
     }
 }"#;
     assert_eq!(
-        parse(CODE_1),
-        Ok(Symbol::ValidKirlCode((
+        parse(CODE_1).unwrap(),
+        Symbol::ValidKirlCode((
             CharacterPosition::new(0, 0)..CharacterPosition::new(7, 1),
             vec![KirlTopLevelStatement::FunctionDefinition((
                 CharacterPosition::new(0, 0)..CharacterPosition::new(7, 1),
@@ -252,6 +252,6 @@ struct MyStruct::<T> {
                     },
                 },
             )),],
-        )))
+        ))
     );
 }
