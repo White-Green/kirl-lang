@@ -224,12 +224,16 @@ pub enum LIRInstruction {
 #[derive(Debug)]
 pub enum LIRStatementListConvertError {
     TypeConvertError(LIRTypeConvertError),
+    UnexpectedBreak,
+    UnexpectedContinue,
 }
 
 impl Display for LIRStatementListConvertError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             LIRStatementListConvertError::TypeConvertError(e) => e.fmt(f),
+            LIRStatementListConvertError::UnexpectedBreak => write!(f, "Unexpected break."),
+            LIRStatementListConvertError::UnexpectedContinue => write!(f, "Unexpected continue."),
         }
     }
 }
@@ -238,6 +242,8 @@ impl Error for LIRStatementListConvertError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             LIRStatementListConvertError::TypeConvertError(e) => Some(e),
+            LIRStatementListConvertError::UnexpectedBreak => None,
+            LIRStatementListConvertError::UnexpectedContinue => None,
         }
     }
 }
@@ -256,8 +262,8 @@ impl From<LIRTypeConvertError> for LIRStatementListConvertError {
 // }
 
 pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count: usize) -> Result<LIRStatementList, LIRStatementListConvertError> {
-    fn convert_list(statements: impl IntoIterator<Item = HIRStatement<(Uuid, HIRType)>>, result: &mut Vec<LIRStatement>, sequence: &mut usize) -> Result<(), LIRStatementListConvertError> {
-        fn convert(statement: HIRStatement<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>, sequence: &mut usize) -> Result<(), LIRStatementListConvertError> {
+    fn convert_list(statements: impl IntoIterator<Item = HIRStatement<(Uuid, HIRType)>>, result: &mut Vec<LIRStatement>, sequence: &mut usize, loop_labels: &mut Vec<String>) -> Result<(), LIRStatementListConvertError> {
+        fn convert(statement: HIRStatement<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>, sequence: &mut usize, loop_labels: &mut Vec<String>) -> Result<(), LIRStatementListConvertError> {
             fn push_variable(variable: Variable<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>) {
                 match variable {
                     Variable::Named(_, (id, _)) => result.push(LIRInstruction::LoadNamedValue(id).into()),
@@ -298,11 +304,11 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                             let end_label = format!("$if_end_{}", *sequence);
                             *sequence += 1;
                             result.push(LIRInstruction::JumpIfTrue(then_label.clone()).into());
-                            convert_list(other_statements, result, sequence)?;
+                            convert_list(other_statements, result, sequence, loop_labels)?;
                             push_variable(other_result, result);
                             result.push(LIRInstruction::Jump(end_label.clone()).into());
                             result.push(LIRStatement { label: Some(then_label), instruction: LIRInstruction::Nop });
-                            convert_list(then_statements, result, sequence)?;
+                            convert_list(then_statements, result, sequence, loop_labels)?;
                             push_variable(then_result, result);
                             result.push(LIRStatement { label: Some(end_label), instruction: LIRInstruction::Nop });
                         }
@@ -318,36 +324,43 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                             let end_label = format!("$if_end_{}", *sequence);
                             *sequence += 1;
                             result.push(LIRInstruction::JumpIfHasType(pattern_type.try_into()?, then_label.clone()).into());
-                            convert_list(other_statements, result, sequence)?;
+                            convert_list(other_statements, result, sequence, loop_labels)?;
                             push_variable(other_result, result);
                             result.push(LIRInstruction::Jump(end_label.clone()).into());
                             result.push(LIRStatement { label: Some(then_label), instruction: LIRInstruction::Nop });
                             result.push(LIRInstruction::Store(condition_binding).into());
-                            convert_list(then_statements, result, sequence)?;
+                            convert_list(then_statements, result, sequence, loop_labels)?;
                             push_variable(then_result, result);
                             result.push(LIRStatement { label: Some(end_label), instruction: LIRInstruction::Nop });
                         }
                         HIRExpression::Loop(inner) => {
                             let label = format!("$loop_anonymous_{}", *sequence);
+                            let label_begin = format!("{}_begin", label);
+                            let label_end = format!("{}_end", label);
+                            loop_labels.push(label);
                             *sequence += 1;
-                            result.push(LIRStatement { label: Some(label.clone()), instruction: LIRInstruction::Nop });
-                            convert_list(inner, result, sequence)?;
-                            result.push(LIRInstruction::Jump(label).into());
+                            result.push(LIRStatement { label: Some(label_begin.clone()), instruction: LIRInstruction::Nop });
+                            convert_list(inner, result, sequence, loop_labels)?;
+                            result.push(LIRInstruction::Jump(label_begin).into());
+                            result.push(LIRStatement { label: Some(label_end), instruction: LIRInstruction::Nop });
                         }
-                        HIRExpression::Assign { variable, value } => match variable {
-                            ReferenceAccess::Variable(dest) => {
-                                push_variable(value, result);
-                                match dest {
-                                    Variable::Named(_, _) => todo!(),
-                                    Variable::Unnamed(dest) => result.push(LIRInstruction::Store(dest).into()),
+                        HIRExpression::Assign { variable, value } => {
+                            push_variable(value.clone(), result);
+                            match variable {
+                                ReferenceAccess::Variable(dest) => {
+                                    push_variable(value, result);
+                                    match dest {
+                                        Variable::Named(_, _) => todo!(),
+                                        Variable::Unnamed(dest) => result.push(LIRInstruction::Store(dest).into()),
+                                    }
+                                }
+                                ReferenceAccess::Member(dest_variable, dest_member) => {
+                                    push_variable(dest_variable, result);
+                                    push_variable(value, result);
+                                    result.push(LIRInstruction::AssignMember(dest_member).into());
                                 }
                             }
-                            ReferenceAccess::Member(dest_variable, dest_member) => {
-                                push_variable(dest_variable, result);
-                                push_variable(value, result);
-                                result.push(LIRInstruction::AssignMember(dest_member).into());
-                            }
-                        },
+                        }
                         HIRExpression::ConstructStruct(members) => {
                             let len = members.len();
                             for (member, value) in members {
@@ -377,17 +390,26 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                     push_variable(value, result);
                     result.push(LIRInstruction::Return.into());
                 }
-                HIRStatement::Continue(_label) => {
-                    todo!()
+                HIRStatement::Continue(label) => {
+                    if let Some(label) = label.as_ref().or_else(|| loop_labels.last()) {
+                        result.push(LIRInstruction::Jump(format!("{}_begin", label)).into());
+                    } else {
+                        return Err(LIRStatementListConvertError::UnexpectedContinue);
+                    }
                 }
-                HIRStatement::Break(_label) => {
-                    todo!()
+                HIRStatement::Break(label) => {
+                    result.push(LIRInstruction::ConstructTuple(0).into()); //TODO:loop式とかで値を持ってbreakするときに変える
+                    if let Some(label) = label.as_ref().or_else(|| loop_labels.last()) {
+                        result.push(LIRInstruction::Jump(format!("{}_end", label)).into());
+                    } else {
+                        return Err(LIRStatementListConvertError::UnexpectedBreak);
+                    }
                 }
             }
             Ok(())
         }
         for statement in statements {
-            convert(statement, result, sequence)?;
+            convert(statement, result, sequence, loop_labels)?;
         }
         Ok(())
     }
@@ -395,7 +417,8 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
     for i in 0..argument_count {
         result.push(LIRInstruction::Store(i).into());
     }
-    convert_list(statements, &mut result, &mut 0)?;
+    let mut loop_labels = Vec::new();
+    convert_list(statements, &mut result, &mut 0, &mut loop_labels)?;
     result.push(LIRInstruction::ConstructTuple(0).into());
     result.push(LIRInstruction::Return.into());
     Ok(result.into())
