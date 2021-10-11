@@ -6,7 +6,7 @@ An experimental project for static-typed script programming language.
 
 ## install
 ```shell
-$ cargo install --git https://github.com/White-Green/kirl-lang --branch main
+$ cargo install --git https://github.com/White-Green/kirl-lang
 ```
 or
 ```shell
