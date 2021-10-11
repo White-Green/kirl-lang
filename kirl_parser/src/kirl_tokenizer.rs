@@ -6,7 +6,7 @@ use std::str::FromStr;
 use dec::{Decimal128, ParseDecimalError};
 use parser::enum_index;
 use parser::enum_index_derive::*;
-use tokenizer::*;
+use tokenizer_generator::tokenizer;
 
 use crate::CharacterPosition;
 
@@ -185,76 +185,74 @@ impl Error for TokenizeError {
     }
 }
 
-pub fn get_tokenizer() -> DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)> {
-    let (tokenizer, _warning) = DFATokenizer::<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)>::builder()
-        .pattern("//.*", |_, _| Ok(None))
-        .pattern("/\\*(\\*[^/]|[^\\*])*\\*/", |_, _| Ok(None))
-        .pattern("\\s", |_, _| Ok(None))
-        .pattern("import", |_, v| Ok(Some(Token::Import(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("fn", |_, v| Ok(Some(Token::Fn(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("struct", |_, v| Ok(Some(Token::Struct(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("let", |_, v| Ok(Some(Token::Let(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("var", |_, v| Ok(Some(Token::Var(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("if", |_, v| Ok(Some(Token::If(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("else", |_, v| Ok(Some(Token::Else(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("match", |_, v| Ok(Some(Token::Match(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("for", |_, v| Ok(Some(Token::For(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("in", |_, v| Ok(Some(Token::In(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("while", |_, v| Ok(Some(Token::While(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("return", |_, v| Ok(Some(Token::Return(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("break", |_, v| Ok(Some(Token::Break(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("continue", |_, v| Ok(Some(Token::Continue(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("[a-zA-Z_][a-zA-Z0-9_]*", |s, v| Ok(Some(Token::Identifier((v.first().unwrap().0..v.last().unwrap().0.next(), s.to_string())))))
-        .pattern("\"(\\\\(n|t|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\}|\\\\|\")|[^\\\\\"\n])*\"", |s, v| {
+tokenizer!{
+    character (CharacterPosition, char);
+    token Result<Option<Token>, TokenizeError>;
+    "//.*": (|_, _| Ok(None));
+    "/\\*(\\*[^/]|[^\\*])*\\*/": (|_, _| Ok(None));
+    "\\s": (|_, _| Ok(None));
+    "import": (|_, v| Ok(Some(Token::Import(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "fn": (|_, v| Ok(Some(Token::Fn(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "struct": (|_, v| Ok(Some(Token::Struct(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "let": (|_, v| Ok(Some(Token::Let(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "var": (|_, v| Ok(Some(Token::Var(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "if": (|_, v| Ok(Some(Token::If(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "else": (|_, v| Ok(Some(Token::Else(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "match": (|_, v| Ok(Some(Token::Match(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "for": (|_, v| Ok(Some(Token::For(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "in": (|_, v| Ok(Some(Token::In(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "while": (|_, v| Ok(Some(Token::While(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "return": (|_, v| Ok(Some(Token::Return(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "break": (|_, v| Ok(Some(Token::Break(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "continue": (|_, v| Ok(Some(Token::Continue(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "[a-zA-Z_][a-zA-Z0-9_]*": (|s, v| Ok(Some(Token::Identifier((v.first().unwrap().0..v.last().unwrap().0.next(), s.to_string())))));
+    "\"(\\\\(n|t|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\}|\\\\|\")|[^\\\\\"\n])*\"": (|s, v| {
             parse_string_literal(s)
                 .ok_or_else(|| TokenizeError::StringParseError {
                     raw: s.to_string(),
                     position: v.first().unwrap().0..v.last().unwrap().0.next(),
                 })
                 .map(|s| Some(Token::StringImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), s))))
-        })
-        .pattern("0b[01_]*[01]|0o[0-7_]*[0-7]|0d[0-9_]*[0-9]|0x[0-9a-fA-F_]*[0-9a-fA-F]|[0-9]|[0-9][0-9_]*[0-9]", |s, v| Ok(Some(Token::NumberImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), parse_integer(s))))))
-        .pattern("([0-9][0-9_]*[0-9]|[0-9]|([0-9][0-9_]*)?\\.[0-9_]*[0-9])([eE][\\+\\-]?[0-9_]*[0-9])?", |s, v| {
+        });
+    "0b[01_]*[01]|0o[0-7_]*[0-7]|0d[0-9_]*[0-9]|0x[0-9a-fA-F_]*[0-9a-fA-F]|[0-9]|[0-9][0-9_]*[0-9]": (|s, v| Ok(Some(Token::NumberImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), parse_integer(s))))));
+    "([0-9][0-9_]*[0-9]|[0-9]|([0-9][0-9_]*)?\\.[0-9_]*[0-9])([eE][\\+\\-]?[0-9_]*[0-9])?": (|s, v| {
             Decimal128::from_str(&s.replace("_", "")).map(|f| Some(Token::NumberImmediate((v.first().unwrap().0..v.last().unwrap().0.next(), f)))).map_err(|e| TokenizeError::DecimalParseError {
                 raw: s.to_string(),
                 position: v.first().unwrap().0..v.last().unwrap().0.next(),
                 error: e,
             })
-        })
-        .pattern("!", |_, v| Ok(Some(Token::Not(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\.", |_, v| Ok(Some(Token::Dot(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern(",", |_, v| Ok(Some(Token::Comma(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("#", |_, v| Ok(Some(Token::Sharp(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("::", |_, v| Ok(Some(Token::DoubleColon(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern(":", |_, v| Ok(Some(Token::Colon(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern(";", |_, v| Ok(Some(Token::Semicolon(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern(">", |_, v| Ok(Some(Token::GreaterThan(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("<", |_, v| Ok(Some(Token::LessThan(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern(">=", |_, v| Ok(Some(Token::GreaterOrEqual(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("<=", |_, v| Ok(Some(Token::LessOrEqual(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("=", |_, v| Ok(Some(Token::Assign(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("==", |_, v| Ok(Some(Token::Equals(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("!=", |_, v| Ok(Some(Token::NotEquals(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\+", |_, v| Ok(Some(Token::Add(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\-", |_, v| Ok(Some(Token::Sub(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\*", |_, v| Ok(Some(Token::Mul(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("/", |_, v| Ok(Some(Token::Div(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("%", |_, v| Ok(Some(Token::Rem(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("&", |_, v| Ok(Some(Token::And(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\|", |_, v| Ok(Some(Token::Or(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\^", |_, v| Ok(Some(Token::Xor(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\(", |_, v| Ok(Some(Token::RoundBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\)", |_, v| Ok(Some(Token::RoundBracketClose(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\[", |_, v| Ok(Some(Token::SquareBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\]", |_, v| Ok(Some(Token::SquareBracketClose(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\{", |_, v| Ok(Some(Token::WaveBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("\\}", |_, v| Ok(Some(Token::WaveBracketClose(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("->", |_, v| Ok(Some(Token::FunctionArrow(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern("=>", |_, v| Ok(Some(Token::MatchArrow(v.first().unwrap().0..v.last().unwrap().0.next()))))
-        .pattern(".|\n", |_, v| Err(TokenizeError::UnknownCharacter { character: v.first().unwrap().1, position: v.first().unwrap().0 }))
-        .build()
-        .unwrap();
-    tokenizer
+        });
+    "!": (|_, v| Ok(Some(Token::Not(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\.": (|_, v| Ok(Some(Token::Dot(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    ",": (|_, v| Ok(Some(Token::Comma(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "#": (|_, v| Ok(Some(Token::Sharp(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "::": (|_, v| Ok(Some(Token::DoubleColon(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    ":": (|_, v| Ok(Some(Token::Colon(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    ";": (|_, v| Ok(Some(Token::Semicolon(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    ">": (|_, v| Ok(Some(Token::GreaterThan(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "<": (|_, v| Ok(Some(Token::LessThan(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    ">=": (|_, v| Ok(Some(Token::GreaterOrEqual(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "<=": (|_, v| Ok(Some(Token::LessOrEqual(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "=": (|_, v| Ok(Some(Token::Assign(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "==": (|_, v| Ok(Some(Token::Equals(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "!=": (|_, v| Ok(Some(Token::NotEquals(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\+": (|_, v| Ok(Some(Token::Add(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\-": (|_, v| Ok(Some(Token::Sub(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\*": (|_, v| Ok(Some(Token::Mul(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "/": (|_, v| Ok(Some(Token::Div(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "%": (|_, v| Ok(Some(Token::Rem(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "&": (|_, v| Ok(Some(Token::And(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\|": (|_, v| Ok(Some(Token::Or(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\^": (|_, v| Ok(Some(Token::Xor(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\(": (|_, v| Ok(Some(Token::RoundBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\)": (|_, v| Ok(Some(Token::RoundBracketClose(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\[": (|_, v| Ok(Some(Token::SquareBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\]": (|_, v| Ok(Some(Token::SquareBracketClose(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\{": (|_, v| Ok(Some(Token::WaveBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "\\}": (|_, v| Ok(Some(Token::WaveBracketClose(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "->": (|_, v| Ok(Some(Token::FunctionArrow(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    "=>": (|_, v| Ok(Some(Token::MatchArrow(v.first().unwrap().0..v.last().unwrap().0.next()))));
+    ".|\n": (|_, v| Err(TokenizeError::UnknownCharacter { character: v.first().unwrap().1, position: v.first().unwrap().0 }));
 }
 
 fn parse_integer(s: &str) -> Decimal128 {
