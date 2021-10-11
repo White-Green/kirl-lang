@@ -185,7 +185,7 @@ impl Error for TokenizeError {
     }
 }
 
-tokenizer!{
+tokenizer! {
     character (CharacterPosition, char);
     token Result<Option<Token>, TokenizeError>;
     "//.*": (|_, _| Ok(None));

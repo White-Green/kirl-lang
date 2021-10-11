@@ -9,9 +9,9 @@ use uuid::Uuid;
 
 use kirl_parser::CharacterPosition;
 
-use crate::{HIRExpression, HIRStatement, HIRType, Immediate, ReferenceAccess, Variable};
 use crate::name_resolver::ResolvedItems;
 use crate::syntax_tree_to_hir::SearchPaths;
+use crate::{HIRExpression, HIRStatement, HIRType, Immediate, ReferenceAccess, Variable};
 
 #[derive(Debug)]
 pub enum DecisionTypeError {
@@ -116,9 +116,9 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 HIRType::Function { arguments: formal_arguments, .. } => {
                                     formal_arguments.len() == actual_arguments.len()
                                         && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
-                                        Variable::Named(_, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
-                                        Variable::Unnamed(id) => types[*id].is_a(formal),
-                                    })
+                                            Variable::Named(_, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
+                                            Variable::Unnamed(id) => types[*id].is_a(formal),
+                                        })
                                 }
                                 _ => false,
                             });

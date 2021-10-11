@@ -286,10 +286,12 @@ impl<T: KirlVMValue + Clone> KirlVMValueCloneable for T {
     }
 }
 
+pub(crate) type StaticValueGenerator = Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>;
+
 pub struct KirlVMExecutable {
     pub(crate) bytecodes: Vec<KirlByteCode>,
     pub(crate) entry_point: usize,
-    pub(crate) static_value_generators: Vec<Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>>,
+    pub(crate) static_value_generators: Vec<StaticValueGenerator>,
     pub(crate) rust_functions: Vec<Arc<Mutex<dyn KirlRustFunction>>>,
     pub(crate) function_pointers: Vec<usize>,
     pub(crate) member_names: Vec<String>,
@@ -331,7 +333,7 @@ impl KirlVMExecutable {
     }
 }
 
-fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map: &mut HashMap<String, u32>, static_value_generators: &mut Vec<Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>>, static_value_index: &HashMap<Uuid, u32>, rust_function_index: &HashMap<Uuid, u32>) -> (impl IntoIterator<Item = KirlByteCode>, impl IntoIterator<Item = (usize, Uuid)>) {
+fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map: &mut HashMap<String, u32>, static_value_generators: &mut Vec<StaticValueGenerator>, static_value_index: &HashMap<Uuid, u32>, rust_function_index: &HashMap<Uuid, u32>) -> (impl IntoIterator<Item = KirlByteCode>, impl IntoIterator<Item = (usize, Uuid)>) {
     let mut result = Vec::new();
     let mut label_position_map = HashMap::new();
     let mut position_label_map = HashMap::new();
