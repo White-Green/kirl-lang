@@ -59,7 +59,7 @@ struct MyStruct::<T> {
                 Some((current_position, c))
             })
             .tokenize_with(&tokenizer, |(_, c)| *c)
-            .filter_map(|token| token.unwrap())
+            .flat_map(|token| token.unwrap())
             .parse(&parser)
     };
     if let Err(_) = parse(CODE) {

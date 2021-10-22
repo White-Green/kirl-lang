@@ -1,13 +1,14 @@
+use arrayvec::ArrayVec;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
 
 use once_cell::unsync::OnceCell;
-use parser::{LR1Parser, Parse, ParseError};
-use tokenizer::{DFATokenizer, Tokenize};
+use parser::{Parse, ParseError};
+use tokenizer::Tokenize;
 
-use crate::kirl_parser::{get_parser, KirlTopLevelStatement, Symbol};
-use crate::kirl_tokenizer::{get_tokenizer, Token, TokenizeError};
+use crate::kirl_parser::{get_parser, KirlTopLevelStatement, Parser, Symbol};
+use crate::kirl_tokenizer::{get_tokenizer, TokenizeError, Tokenizer};
 
 pub mod kirl_parser;
 pub mod kirl_tokenizer;
@@ -87,8 +88,8 @@ impl Display for ParseErrorDetail {
 impl Error for ParseErrorDetail {}
 
 pub struct KirlParser {
-    tokenizer: DFATokenizer<Result<Option<Token>, TokenizeError>, (CharacterPosition, char)>,
-    parser: LR1Parser<Symbol, Token, ParseErrorDetail>,
+    tokenizer: Tokenizer,
+    parser: Parser,
 }
 
 impl Default for KirlParser {
@@ -115,11 +116,11 @@ impl KirlParser {
                 Some((current_position, c))
             })
             .tokenize_with(&self.tokenizer, |(_, c)| *c)
-            .filter_map(|token| match token {
+            .flat_map(|token| match token {
                 Ok(token) => token,
                 Err(e) => {
                     let _ = cell.set(e);
-                    None
+                    ArrayVec::new()
                 }
             })
             .parse(&self.parser);
