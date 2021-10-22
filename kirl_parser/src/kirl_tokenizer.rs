@@ -191,7 +191,7 @@ impl Error for TokenizeError {
 }
 
 macro_rules! array {
-    ($($e:expr),*) => { std::array::IntoIter::new([$($e),*]).collect() }
+    ($($e:expr),*) => { [$($e),*].into_iter().collect() }
 }
 
 pub type Tokenizer = DFATokenizer<Result<ArrayVec<Token, 2>, TokenizeError>, (CharacterPosition, char)>;

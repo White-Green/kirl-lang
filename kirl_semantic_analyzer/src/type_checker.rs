@@ -1,4 +1,4 @@
-use core::array;
+
 use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -174,7 +174,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                     (ty.into_owned(), Reachable::Reachable)
                                 } else {
                                     return Err(DecisionTypeError::TypeMismatched {
-                                        expected: HIRType::AnonymousStruct(array::IntoIter::new([(member.clone(), HIRType::Infer)]).collect()),
+                                        expected: HIRType::AnonymousStruct([(member.clone(), HIRType::Infer)].into_iter().collect()),
                                         actual: types[*id].clone(),
                                     });
                                 }
@@ -287,7 +287,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                             }
                                         } else {
                                             return Err(DecisionTypeError::TypeMismatched {
-                                                expected: HIRType::AnonymousStruct(array::IntoIter::new([(member.clone(), value_type.clone())]).collect()),
+                                                expected: HIRType::AnonymousStruct([(member.clone(), value_type.clone())].into_iter().collect()),
                                                 actual: variable_type.clone(),
                                             });
                                         }

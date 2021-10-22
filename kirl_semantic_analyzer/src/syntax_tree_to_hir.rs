@@ -1,4 +1,4 @@
-use core::array;
+
 use std::collections::{BTreeMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
@@ -205,7 +205,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             let mut imports = imports.clone();
             body.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: HIRType::Or(vec![HIRType::Tuple(Vec::new()), HIRType::AnonymousStruct(array::IntoIter::new([("value".to_string(), HIRType::Infer)]).collect())]),
+                variable_type: HIRType::Or(vec![HIRType::Tuple(Vec::new()), HIRType::AnonymousStruct([("value".to_string(), HIRType::Infer)].into_iter().collect())]),
                 expression: HIRExpression::CallFunction {
                     function: Variable::Named(iter_position, get_candidate_paths(vec!["_next".to_string()], &imports)),
                     arguments: vec![iterator],
@@ -218,7 +218,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::IfLet {
                     condition_binding: *variable_sequence,
-                    pattern_type: HIRType::AnonymousStruct(array::IntoIter::new([("value".to_string(), HIRType::Infer)]).collect()),
+                    pattern_type: HIRType::AnonymousStruct([("value".to_string(), HIRType::Infer)].into_iter().collect()),
                     condition,
                     then: (
                         vec![HIRStatement::Binding {

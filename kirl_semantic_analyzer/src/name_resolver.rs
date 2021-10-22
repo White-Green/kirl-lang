@@ -154,7 +154,7 @@ impl Resolvable for Variable<SearchPaths> {
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
             Variable::Named(range, paths) => {
-                let reference = ResolvedItems(paths.clone(), paths.0.into_iter().flat_map(|path| std::array::IntoIter::new([path.clone()]).cycle().zip(resolver.resolve(&path)).map(|(path, (id, ty))| (path, id, ty))).collect());
+                let reference = ResolvedItems(paths.clone(), paths.0.into_iter().flat_map(|path| [path.clone()].into_iter().cycle().zip(resolver.resolve(&path)).map(|(path, (id, ty))| (path, id, ty))).collect());
                 Variable::Named(range, reference)
             }
             Variable::Unnamed(id) => Variable::Unnamed(id),
