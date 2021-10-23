@@ -174,6 +174,7 @@ impl Resolvable for ReferenceAccess<SearchPaths> {
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
             ReferenceAccess::Variable(variable) => ReferenceAccess::Variable(variable.resolve(resolver)),
+            ReferenceAccess::TupleItem(variable, index) => ReferenceAccess::TupleItem(variable.resolve(resolver), index),
             ReferenceAccess::Member(variable, member) => ReferenceAccess::Member(variable.resolve(resolver), member),
         }
     }
@@ -181,6 +182,7 @@ impl Resolvable for ReferenceAccess<SearchPaths> {
     fn all_reference(&self) -> Vec<&[String]> {
         match self {
             ReferenceAccess::Variable(variable) => variable.all_reference(),
+            ReferenceAccess::TupleItem(variable, _) => variable.all_reference(),
             ReferenceAccess::Member(variable, _) => variable.all_reference(),
         }
     }
@@ -196,6 +198,7 @@ impl Resolvable for HIRExpression<SearchPaths> {
                 arguments: arguments.resolve(resolver),
             },
             HIRExpression::AccessVariable(variable) => HIRExpression::AccessVariable(variable.resolve(resolver)),
+            HIRExpression::AccessTupleItem { variable, index } => HIRExpression::AccessTupleItem { variable: variable.resolve(resolver), index },
             HIRExpression::AccessMember { variable, member } => HIRExpression::AccessMember { variable: variable.resolve(resolver), member },
             HIRExpression::If { condition, then, other } => HIRExpression::If {
                 condition: condition.resolve(resolver),
@@ -226,6 +229,7 @@ impl Resolvable for HIRExpression<SearchPaths> {
                 result
             }
             HIRExpression::AccessVariable(variable) => variable.all_reference(),
+            HIRExpression::AccessTupleItem { variable, .. } => variable.all_reference(),
             HIRExpression::AccessMember { variable, .. } => variable.all_reference(),
             HIRExpression::If { condition, then, other } => {
                 let mut result = condition.all_reference();

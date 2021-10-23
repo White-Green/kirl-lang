@@ -85,6 +85,14 @@ pub fn exec(
                 global_stack_offset = global_stack_offset_stack.pop().expect("");
             }
             KirlByteCodeOpcode::Nop => {}
+            KirlByteCodeOpcode::AccessTupleItem => {
+                let operand = instruction.operand();
+                let value = local_stack.pop().expect("");
+                let value = Vec::<Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(value).expect("");
+                let value = value.read().expect("");
+                let value = Arc::clone(&value[operand as usize]);
+                local_stack.push(value);
+            }
             KirlByteCodeOpcode::AccessMember => {
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
@@ -92,6 +100,13 @@ pub fn exec(
                 let value = value.read().expect("");
                 let member = value.get(&member_names[operand as usize]).expect("");
                 local_stack.push(Arc::clone(member));
+            }
+            KirlByteCodeOpcode::AssignTupleItem => {
+                let operand = instruction.operand();
+                let value = local_stack.pop().expect("");
+                let dest = local_stack.pop().expect("");
+                let dest = Vec::<Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(dest).expect("");
+                dest.write().expect("")[operand as usize] = value;
             }
             KirlByteCodeOpcode::AssignMember => {
                 let operand = instruction.operand();
@@ -113,9 +128,9 @@ pub fn exec(
             }
             KirlByteCodeOpcode::ConstructTuple => {
                 let operand = instruction.operand();
-                let mut result = HashMap::with_capacity(operand as usize);
-                for i in 0..operand {
-                    result.insert(format!("{}", i), local_stack.pop().expect(""));
+                let mut result = Vec::with_capacity(operand as usize);
+                for _ in 0..operand {
+                    result.push(local_stack.pop().expect(""));
                 }
                 local_stack.push(Arc::new(RwLock::new(result)));
             }

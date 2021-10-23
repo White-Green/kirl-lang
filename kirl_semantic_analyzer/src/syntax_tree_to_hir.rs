@@ -1,4 +1,3 @@
-
 use std::collections::{BTreeMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
@@ -65,18 +64,32 @@ pub fn analysis_statements(code: Vec<Statement>) -> AnalysisStatementResult<Vec<
     analysis(code, Vec::new(), ImportPath::List(Vec::new()))
 }
 
-fn analysis(code: Vec<Statement>, argument_names: Vec<String>, import_paths: ImportPath) -> AnalysisStatementResult<Vec<HIRStatement<SearchPaths>>> {
+fn analysis(code: Vec<Statement>, argument_patterns: Vec<Pattern>, import_paths: ImportPath) -> AnalysisStatementResult<Vec<HIRStatement<SearchPaths>>> {
     let mut result = Vec::new();
     let mut variables = BTreeMap::new();
     let mut imports: BTreeMap<String, HashSet<_>> = BTreeMap::new();
     for path in collect_import_path(import_paths, Vec::new()).0 {
         imports.entry(path.last().unwrap().clone()).or_default().insert(path);
     }
-    let mut variable_sequence = argument_names.len();
-    for (id, name) in argument_names.into_iter().enumerate() {
-        variables.insert(name, id).map_or(Ok(()), |old| Err(AnalysisStatementError::CollisionArgumentName(old, id)))?;
+    let mut deconstruct_argument = Vec::new();
+    let mut variable_sequence = argument_patterns.len();
+    for (id, pattern) in argument_patterns.into_iter().enumerate() {
+        let argument_name = format!("__argument_{}", id);
+        deconstruct_argument.push(Statement {
+            position: Default::default(),
+            statement: StatementItem::LetBinding(LetBinding {
+                position: Default::default(),
+                pattern,
+                type_hint: None,
+                expression: Box::new(Expression {
+                    position: Default::default(),
+                    expression: ExpressionItem::AccessVariable(Path { position: Default::default(), path: vec![argument_name.clone()] }),
+                }),
+            }),
+        });
+        variables.insert(argument_name, id).map_or(Ok(()), |old| Err(AnalysisStatementError::CollisionArgumentName(old, id)))?;
     }
-    for stmt in code {
+    for stmt in deconstruct_argument.into_iter().chain(code) {
         if push_statement(stmt, &mut result, &mut variables, &mut variable_sequence, &mut imports)? != StatementReachable::Reachable {
             break;
         }
@@ -100,6 +113,18 @@ fn push_deconstruct_pattern(pattern: Pattern, begin: Variable<SearchPaths>, resu
                 variables.insert(name, id);
             }
         },
+        Pattern::Tuple(patterns) => {
+            for (index, pattern) in patterns.into_iter().enumerate() {
+                result.push(HIRStatement::Binding {
+                    variable_id: *variable_sequence,
+                    variable_type: HIRType::Infer,
+                    expression: HIRExpression::AccessTupleItem { variable: begin.clone(), index },
+                });
+                let current_variable = Variable::Unnamed(*variable_sequence);
+                *variable_sequence += 1;
+                push_deconstruct_pattern(pattern, current_variable, result, variables, variable_sequence, imports)?;
+            }
+        }
         Pattern::Struct(_, patterns) => {
             for (member, pattern) in patterns {
                 result.push(HIRStatement::Binding {
@@ -396,6 +421,20 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::Immediate(Immediate::Number(value)),
+            });
+            let variable = Variable::Unnamed(*variable_sequence);
+            *variable_sequence += 1;
+            Ok((StatementReachable::Reachable, variable))
+        }
+        ExpressionItem::AccessTupleItem(expression, index) => {
+            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+            if reachable != StatementReachable::Reachable {
+                return Ok((reachable, variable));
+            }
+            result.push(HIRStatement::Binding {
+                variable_id: *variable_sequence,
+                variable_type: HIRType::Infer,
+                expression: HIRExpression::AccessTupleItem { variable, index },
             });
             let variable = Variable::Unnamed(*variable_sequence);
             *variable_sequence += 1;
@@ -946,6 +985,24 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                             variable: ReferenceAccess::Variable(variable_reference.copied().map(Variable::Unnamed).unwrap_or_else(|| Variable::Named(position, get_candidate_paths(path, imports)))),
                             value: value_variable,
                         },
+                    });
+                    let result_variable = Variable::Unnamed(*variable_sequence);
+                    *variable_sequence += 1;
+                    Ok((StatementReachable::Reachable, result_variable))
+                }
+                Expression { expression: ExpressionItem::AccessTupleItem(base, index), .. } => {
+                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports)?;
+                    if reachable != StatementReachable::Reachable {
+                        return Ok((reachable, base));
+                    }
+                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports)?;
+                    if reachable != StatementReachable::Reachable {
+                        return Ok((reachable, value));
+                    }
+                    result.push(HIRStatement::Binding {
+                        variable_id: *variable_sequence,
+                        variable_type: HIRType::Infer,
+                        expression: HIRExpression::Assign { variable: ReferenceAccess::TupleItem(base, index), value },
                     });
                     let result_variable = Variable::Unnamed(*variable_sequence);
                     *variable_sequence += 1;

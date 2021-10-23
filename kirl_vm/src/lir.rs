@@ -215,7 +215,9 @@ pub enum LIRInstruction {
     Return,
     Nop,
     AccessMember(String),
+    AccessTupleItem(usize),
     AssignMember(String),
+    AssignTupleItem(usize),
     ConstructStruct(usize),
     ConstructTuple(usize),
     ConstructArray(usize),
@@ -290,6 +292,10 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                         HIRExpression::AccessVariable(variable) => {
                             push_variable(variable, result);
                         }
+                        HIRExpression::AccessTupleItem { variable, index } => {
+                            push_variable(variable, result);
+                            result.push(LIRInstruction::AccessTupleItem(index).into());
+                        }
                         HIRExpression::AccessMember { variable, member } => {
                             push_variable(variable, result);
                             result.push(LIRInstruction::AccessMember(member).into());
@@ -353,6 +359,11 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                                         Variable::Named(_, _) => todo!(),
                                         Variable::Unnamed(dest) => result.push(LIRInstruction::Store(dest).into()),
                                     }
+                                }
+                                ReferenceAccess::TupleItem(dest_variable, dest_index) => {
+                                    push_variable(dest_variable, result);
+                                    push_variable(value, result);
+                                    result.push(LIRInstruction::AssignTupleItem(dest_index).into());
                                 }
                                 ReferenceAccess::Member(dest_variable, dest_member) => {
                                     push_variable(dest_variable, result);

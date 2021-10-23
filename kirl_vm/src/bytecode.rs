@@ -28,7 +28,9 @@ pub enum KirlByteCodeOpcode {
     CallRustFunction,
     Return,
     Nop,
+    AccessTupleItem,
     AccessMember,
+    AssignTupleItem,
     AssignMember,
     ConstructStruct,
     ConstructTuple,
@@ -394,10 +396,16 @@ fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map:
             LIRInstruction::Nop => {
                 result.push(KirlByteCode::without_operand(KirlByteCodeOpcode::Nop));
             }
+            LIRInstruction::AccessTupleItem(index) => {
+                result.push(KirlByteCode::new(KirlByteCodeOpcode::AccessTupleItem, index as u32));
+            }
             LIRInstruction::AccessMember(member) => {
                 let member_name_map_len = member_name_map.len() as u32;
                 let member = *member_name_map.entry(member).or_insert(member_name_map_len);
                 result.push(KirlByteCode::new(KirlByteCodeOpcode::AccessMember, member));
+            }
+            LIRInstruction::AssignTupleItem(index) => {
+                result.push(KirlByteCode::new(KirlByteCodeOpcode::AssignTupleItem, index as u32));
             }
             LIRInstruction::AssignMember(member) => {
                 let member_name_map_len = member_name_map.len() as u32;

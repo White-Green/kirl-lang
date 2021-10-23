@@ -1,4 +1,3 @@
-
 use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -157,6 +156,29 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             }
                             Variable::Unnamed(id) => (types[*id].clone(), Reachable::Reachable),
                         },
+                        HIRExpression::AccessTupleItem { variable, index } => match variable {
+                            Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                candidates.retain(|(_, _, ty)| ty.has_tuple_nth(*index));
+                                if let [(_, _, ty)] = candidates.as_slice() {
+                                    (ty.tuple_nth_type(*index).unwrap().into_owned(), Reachable::Reachable)
+                                } else {
+                                    return Err(DecisionTypeError::NamedReferenceIsNotUnique {
+                                        position: position.clone(),
+                                        found: ResolvedItems(mem::take(paths), mem::take(candidates)),
+                                    });
+                                }
+                            }
+                            Variable::Unnamed(id) => {
+                                if let Some(ty) = types[*id].tuple_nth_type(*index) {
+                                    (ty.into_owned(), Reachable::Reachable)
+                                } else {
+                                    return Err(DecisionTypeError::TypeMismatched {
+                                        expected: HIRType::Tuple(vec![HIRType::Infer; *index + 1]),
+                                        actual: types[*id].clone(),
+                                    });
+                                }
+                            }
+                        },
                         HIRExpression::AccessMember { variable, member } => match variable {
                             Variable::Named(position, ResolvedItems(paths, candidates)) => {
                                 candidates.retain(|(_, _, ty)| ty.has_member(member));
@@ -271,6 +293,25 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                             (types[*variable].clone(), Reachable::Reachable)
                                         } else {
                                             return Err(DecisionTypeError::TypeMismatched { expected: types[*variable].clone(), actual: value_type.clone() });
+                                        }
+                                    } else {
+                                        return Err(DecisionTypeError::UnImplementedFeature("assign to un-local variable"));
+                                    }
+                                }
+                                ReferenceAccess::TupleItem(variable, index) => {
+                                    if let Variable::Unnamed(variable) = variable {
+                                        let variable_type = &types[*variable];
+                                        if let Some(ty) = variable_type.tuple_nth_type(*index) {
+                                            if value_type.is_a(&ty) {
+                                                (ty.into_owned(), Reachable::Reachable)
+                                            } else {
+                                                return Err(DecisionTypeError::TypeMismatched { expected: ty.into_owned(), actual: value_type.clone() });
+                                            }
+                                        } else {
+                                            return Err(DecisionTypeError::TypeMismatched {
+                                                expected: HIRType::Tuple([HIRType::Infer].into_iter().cycle().take(*index).chain([value_type.clone()]).collect()),
+                                                actual: variable_type.clone(),
+                                            });
                                         }
                                     } else {
                                         return Err(DecisionTypeError::UnImplementedFeature("assign to un-local variable"));
@@ -423,6 +464,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             arguments: arguments.into_iter().map(into_one).collect(),
                         },
                         HIRExpression::AccessVariable(variable) => HIRExpression::AccessVariable(into_one(variable)),
+                        HIRExpression::AccessTupleItem { variable, index } => HIRExpression::AccessTupleItem { variable: into_one(variable), index },
                         HIRExpression::AccessMember { variable, member } => HIRExpression::AccessMember { variable: into_one(variable), member },
                         HIRExpression::If {
                             condition,
@@ -450,6 +492,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                         HIRExpression::Assign { variable, value } => HIRExpression::Assign {
                             variable: match variable {
                                 ReferenceAccess::Variable(variable) => ReferenceAccess::Variable(into_one(variable)),
+                                ReferenceAccess::TupleItem(variable, index) => ReferenceAccess::TupleItem(into_one(variable), index),
                                 ReferenceAccess::Member(variable, member) => ReferenceAccess::Member(into_one(variable), member),
                             },
                             value: into_one(value),
@@ -492,6 +535,7 @@ pub fn used_functions(statements: &[HIRStatement<(Uuid, HIRType)>]) -> HashSet<U
                         }
                     }
                     HIRExpression::AccessVariable(variable) => add_used_variable(variable, result),
+                    HIRExpression::AccessTupleItem { variable, .. } => add_used_variable(variable, result),
                     HIRExpression::AccessMember { variable, .. } => add_used_variable(variable, result),
                     HIRExpression::If {
                         condition,
@@ -520,6 +564,7 @@ pub fn used_functions(statements: &[HIRStatement<(Uuid, HIRType)>]) -> HashSet<U
                     HIRExpression::Assign { variable, value } => {
                         match variable {
                             ReferenceAccess::Variable(variable) => add_used_variable(variable, result),
+                            ReferenceAccess::TupleItem(variable, _) => add_used_variable(variable, result),
                             ReferenceAccess::Member(variable, _) => add_used_variable(variable, result),
                         }
                         add_used_variable(value, result);

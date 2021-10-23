@@ -78,7 +78,7 @@ pub struct Function {
     pub position: Range<CharacterPosition>,
     pub name: String,
     pub generics_arguments: Vec<String>,
-    pub arguments: Vec<(String, Type)>,
+    pub arguments: Vec<(Pattern, Type)>,
     pub return_type: Type,
     pub expression: Expression,
 }
@@ -170,6 +170,7 @@ pub enum ExpressionItem {
     AccessVariable(Path),
     StringImmediate(String),
     NumberImmediate(Decimal128),
+    AccessTupleItem(Box<Expression>, usize),
     AccessMember(Box<Expression>, String),
     CallFunction(Option<Box<Expression>>, Option<Path>, Vec<Expression>),
     Indexer(Box<Expression>, Box<Expression>),
@@ -243,6 +244,7 @@ impl Default for KirlTopLevelStatement {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Pattern {
     Variable(String),
+    Tuple(Vec<Pattern>),
     Struct(StructName, Vec<(String, Pattern)>),
 }
 
@@ -263,7 +265,7 @@ pub struct LetBinding {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Closure {
     pub position: Range<CharacterPosition>,
-    pub arguments: Vec<(String, Option<Type>)>,
+    pub arguments: Vec<(Pattern, Option<Type>)>,
     pub expression: Box<Expression>,
 }
 
@@ -315,11 +317,12 @@ pub enum Symbol {
     ForStatement((Range<CharacterPosition>, ForStatement)),
     WhileStatement((Range<CharacterPosition>, WhileStatement)),
     Pattern((Range<CharacterPosition>, Pattern)),
+    CommaSeparatedPatterns((Range<CharacterPosition>, Vec<Pattern>)),
     PatternStructItems((Range<CharacterPosition>, Vec<(String, Pattern)>)),
-    ClosureArguments((Range<CharacterPosition>, Vec<(String, Option<Type>)>)),
+    ClosureArguments((Range<CharacterPosition>, Vec<(Pattern, Option<Type>)>)),
     CommaSeparatedExpressions((Range<CharacterPosition>, Vec<Expression>)),
     FunctionDefinition((Range<CharacterPosition>, Function)),
-    FunctionArguments((Range<CharacterPosition>, Vec<(String, Type)>)),
+    FunctionArguments((Range<CharacterPosition>, Vec<(Pattern, Type)>)),
     ImportStatement((Range<CharacterPosition>, ImportPath)),
     ImportPath((Range<CharacterPosition>, ImportPath)),
     ImportPathChild((Range<CharacterPosition>, ImportPath)),
@@ -349,6 +352,7 @@ parser! {
             Identifier = Identifier(Default::default()),
             StringImmediate = StringImmediate(Default::default()),
             NumberImmediate = NumberImmediate(Default::default()),
+            TupleIndex = TupleIndex(Default::default()),
             "!" = Not(Default::default()),
             "." = Dot(Default::default()),
             "," = Comma(Default::default()),
@@ -412,6 +416,7 @@ parser! {
             ForStatement = ForStatement(Default::default()),
             WhileStatement = WhileStatement(Default::default()),
             Pattern = Pattern(Default::default()),
+            CommaSeparatedPatterns = CommaSeparatedPatterns(Default::default()),
             PatternStructItems = PatternStructItems(Default::default()),
             ClosureArguments = ClosureArguments(Default::default()),
             CommaSeparatedExpressions = CommaSeparatedExpressions(Default::default()),
@@ -427,38 +432,32 @@ parser! {
         start ValidKirlCode;
         <ValidKirlCode>::=: [] => Ok(Symbol::ValidKirlCode(Default::default()));
             |<ValidKirlCode> <Statement>: list => match list {
-                [NonTerminal(Symbol::ValidKirlCode((_, list))), NonTerminal(Symbol::Statement((range, statement)))] if list.is_empty() => Ok(Symbol::ValidKirlCode((range.clone(), vec![KirlTopLevelStatement::Statement((mem::take(range), mem::take(statement)))]))),
-                [NonTerminal(Symbol::ValidKirlCode((Range { start, .. }, list))), NonTerminal(Symbol::Statement((range, statement)))] => Ok(Symbol::ValidKirlCode((*start..range.end, {
-                    list.push(KirlTopLevelStatement::Statement((mem::take(range), mem::take(statement))));
-                    mem::take(list)
-                }))),
-                _ => unreachable!(),
-            };
+                    [NonTerminal(Symbol::ValidKirlCode((_, list))), NonTerminal(Symbol::Statement((range, statement)))] if list.is_empty() => Ok(Symbol::ValidKirlCode((range.clone(), vec![KirlTopLevelStatement::Statement((mem::take(range), mem::take(statement)))]))),
+                    [NonTerminal(Symbol::ValidKirlCode((Range { start, .. }, list))), NonTerminal(Symbol::Statement((range, statement)))] => Ok(Symbol::ValidKirlCode((*start..range.end, {
+                        list.push(KirlTopLevelStatement::Statement((mem::take(range), mem::take(statement))));
+                        mem::take(list)
+                    }))),
+                    _ => unreachable!(),
+                };
             |<ValidKirlCode> <FunctionDefinition>: list => match list {
-                [NonTerminal(Symbol::ValidKirlCode((_, list))), NonTerminal(Symbol::FunctionDefinition((range, function)))] if list.is_empty() => Ok(Symbol::ValidKirlCode((range.clone(), vec![KirlTopLevelStatement::FunctionDefinition((mem::take(range), mem::take(function)))]))),
-                [NonTerminal(Symbol::ValidKirlCode((Range { start, .. }, list))), NonTerminal(Symbol::FunctionDefinition((range, function)))] => Ok(Symbol::ValidKirlCode((*start..range.end, {
-                    list.push(KirlTopLevelStatement::FunctionDefinition((mem::take(range), mem::take(function))));
-                    mem::take(list)
-                }))),
-                _ => unreachable!(),
-            };
+                    [NonTerminal(Symbol::ValidKirlCode((_, list))), NonTerminal(Symbol::FunctionDefinition((range, function)))] if list.is_empty() => Ok(Symbol::ValidKirlCode((range.clone(), vec![KirlTopLevelStatement::FunctionDefinition((mem::take(range), mem::take(function)))]))),
+                    [NonTerminal(Symbol::ValidKirlCode((Range { start, .. }, list))), NonTerminal(Symbol::FunctionDefinition((range, function)))] => Ok(Symbol::ValidKirlCode((*start..range.end, {
+                        list.push(KirlTopLevelStatement::FunctionDefinition((mem::take(range), mem::take(function))));
+                        mem::take(list)
+                    }))),
+                    _ => unreachable!(),
+                };
             |<ValidKirlCode> <StructDefinition>: list => match list {
-                [NonTerminal(Symbol::ValidKirlCode((_, list))), NonTerminal(Symbol::StructDefinition((range, s)))] if list.is_empty() => Ok(Symbol::ValidKirlCode((range.clone(), vec![KirlTopLevelStatement::StructDefinition((mem::take(range), mem::take(s)))]))),
-                [NonTerminal(Symbol::ValidKirlCode((Range { start, .. }, list))), NonTerminal(Symbol::StructDefinition((range, s)))] => Ok(Symbol::ValidKirlCode((*start..range.end, {
-                    list.push(KirlTopLevelStatement::StructDefinition((mem::take(range), mem::take(s))));
-                    mem::take(list)
-                }))),
-                _ => unreachable!(),
-            };
+                    [NonTerminal(Symbol::ValidKirlCode((_, list))), NonTerminal(Symbol::StructDefinition((range, s)))] if list.is_empty() => Ok(Symbol::ValidKirlCode((range.clone(), vec![KirlTopLevelStatement::StructDefinition((mem::take(range), mem::take(s)))]))),
+                    [NonTerminal(Symbol::ValidKirlCode((Range { start, .. }, list))), NonTerminal(Symbol::StructDefinition((range, s)))] => Ok(Symbol::ValidKirlCode((*start..range.end, {
+                        list.push(KirlTopLevelStatement::StructDefinition((mem::take(range), mem::take(s))));
+                        mem::take(list)
+                    }))),
+                    _ => unreachable!(),
+                };
             |<ValidKirlCode> ERROR: [_, Error(error_tokens)] => Err(ParseErrorDetail::SyntaxErrorAt(error_tokens.first().map(Token::get_position).map(|range|range.start).unwrap_or_default()..error_tokens.last().map(Token::get_position).map(|range|range.end).unwrap_or_default()));
-        <Type>::=[Identifier]: [Terminal(Token::Identifier((position, ident)))] => Ok(Symbol::Type((position.clone(), Type::NamedType(NamedType { position: position.clone(), path: vec![ident.clone()], generics_arguments: Vec::new() }))));
-           |"!": [Terminal(Token::Not(position))] => Ok(Symbol::Type((position.clone(), Type::Unreachable(position.clone()))));
-           |[Identifier] "::" "<" <CommaSeparatedTypes> ">": [Terminal(Token::Identifier((Range { start, .. }, name))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::NamedType(NamedType { position: *start..*end, path: vec![name.clone()], generics_arguments: mem::take(types) }))));
-           |<FullPath>: [NonTerminal(Symbol::FullPath((symbol_position, Path { position, path })))] => Ok(Symbol::Type((mem::take(symbol_position), Type::NamedType(NamedType {
-                    position: position.clone(),
-                    path: mem::take(path),
-                    generics_arguments: Vec::new(),
-                }))));
+        <Type>::=<FullPath>: [NonTerminal(Symbol::FullPath((position, Path { path, .. })))] => Ok(Symbol::Type((position.clone(), Type::NamedType(NamedType { position: position.clone(), path: mem::take(path), generics_arguments: Vec::new() }))));
+            |"!": [Terminal(Token::Not(position))] => Ok(Symbol::Type((position.clone(), Type::Unreachable(position.clone()))));
             |<FullPath> "::" "<" <CommaSeparatedTypes> ">": [NonTerminal(Symbol::FullPath((Range { start, .. }, Path { path, .. }))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::NamedType(NamedType {
                     position: *start..*end,
                     path: mem::take(path),
@@ -468,6 +467,7 @@ parser! {
             |"(" <Type> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Type((_, inner_type))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, mem::take(inner_type))));
             |"(" <Type> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Type((_, inner_type))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::Tuple(*start..*end, vec![mem::take(inner_type)]))));
             |"(" <CommaSeparatedTypes> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::Tuple(*start..*end, mem::take(types)))));
+            |"(" <CommaSeparatedTypes> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedTypes((_, types))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::Tuple(*start..*end, mem::take(types)))));
             |"#" "{" <StructDefinitionItems> "}": [Terminal(Token::Sharp(Range { start, .. })), _, NonTerminal(Symbol::StructDefinitionItems((_, members))), Terminal(Token::WaveBracketClose(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::AnonymousStruct(AnonymousStructType { position: *start..*end, members: mem::take(members) }))));
             |"(" ")" "->" <Type>: [Terminal(Token::RoundBracketOpen(Range { start, .. })), _, _, NonTerminal(Symbol::Type((Range { end, .. }, return_type)))] => Ok(Symbol::Type((*start..*end, Type::Function(FunctionType {
                     position: *start..*end,
@@ -485,7 +485,7 @@ parser! {
                     result: Box::new(mem::take(return_type)),
                 }))));
             |"(" <OrSeparatedTypes> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::OrSeparatedTypes((_, types))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Type((*start..*end, Type::Or(*start..*end, mem::take(types)))));
-        <FullPath>::=[Identifier] "::" [Identifier]: [Terminal(Token::Identifier((Range { start, .. }, first))), _, Terminal(Token::Identifier((Range { end, .. }, second)))] => Ok(Symbol::FullPath((*start..*end, Path { position: *start..*end, path: vec![first.clone(), second.clone()] })));
+        <FullPath>::=[Identifier]: [Terminal(Token::Identifier((range, first)))] => Ok(Symbol::FullPath((range.clone(), Path { position: range.clone(), path: vec![first.clone()] })));
             |<FullPath> "::" [Identifier]: [NonTerminal(Symbol::FullPath((Range { start, .. }, Path { path, .. }))), _, Terminal(Token::Identifier((Range { end, .. }, last)))] => Ok(Symbol::FullPath((*start..*end, Path {
                     position: *start..*end,
                     path: {
@@ -530,20 +530,20 @@ parser! {
                     mem::take(items)
                 })));
         <LetBinding>::="var" <Pattern> "=" <Expression>: [Terminal(Token::Var(Range { start, .. })), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] => Ok(Symbol::LetBinding((*start..*end, LetBinding { position: *start..*end, pattern: mem::take(pattern), type_hint: None, expression: Box::new(mem::take(expression)) })));
-           |"var" <Pattern> ":" <Type> "=" <Expression>: [Terminal(Token::Var(Range { start, .. })), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Type((_, type_hint))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] => Ok(Symbol::LetBinding((*start..*end, LetBinding { position: *start..*end, pattern: mem::take(pattern), type_hint: Some(mem::take(type_hint)), expression: Box::new(mem::take(expression)) })));
+            |"var" <Pattern> ":" <Type> "=" <Expression>: [Terminal(Token::Var(Range { start, .. })), NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Type((_, type_hint))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] => Ok(Symbol::LetBinding((*start..*end, LetBinding { position: *start..*end, pattern: mem::take(pattern), type_hint: Some(mem::take(type_hint)), expression: Box::new(mem::take(expression)) })));
         <Statement>::=<ImportStatement>: [NonTerminal(Symbol::ImportStatement((position, path)))] => Ok(Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::Import(mem::take(path)) })));
-           |<Expression> ";": [NonTerminal(Symbol::Expression((Range { start, .. }, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Expression(mem::take(expression)) })));
-           |<LetBinding> ";": [NonTerminal(Symbol::LetBinding((Range { start, .. }, let_binding))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::LetBinding(mem::take(let_binding)) })));
-           |"return" <Expression> ";": [Terminal(Token::Return(Range { start, .. })), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Return(Some(mem::take(expression))) })));
-           |"return" ";": [Terminal(Token::Return(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Return(None) })));
-           |"continue" ";": [Terminal(Token::Continue(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Continue(None) })));
-           |"continue" [Identifier] ";": [Terminal(Token::Continue(Range { start, .. })), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Continue(Some(label.clone())) })));
-           |"break" ";": [Terminal(Token::Break(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Break(None) })));
-           |"break" [Identifier] ";": [Terminal(Token::Break(Range { start, .. })), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Break(Some(label.clone())) })));
-           |<ForStatement>: [NonTerminal(Symbol::ForStatement((position, for_statement)))] => Ok(Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::For(mem::take(for_statement)) })));
-           |<WhileStatement>: [NonTerminal(Symbol::WhileStatement((position, while_statement)))] => Ok(Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::While(mem::take(while_statement)) })));
+            |<Expression> ";": [NonTerminal(Symbol::Expression((Range { start, .. }, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Expression(mem::take(expression)) })));
+            |<LetBinding> ";": [NonTerminal(Symbol::LetBinding((Range { start, .. }, let_binding))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::LetBinding(mem::take(let_binding)) })));
+            |"return" <Expression> ";": [Terminal(Token::Return(Range { start, .. })), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Return(Some(mem::take(expression))) })));
+            |"return" ";": [Terminal(Token::Return(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Return(None) })));
+            |"continue" ";": [Terminal(Token::Continue(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Continue(None) })));
+            |"continue" [Identifier] ";": [Terminal(Token::Continue(Range { start, .. })), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Continue(Some(label.clone())) })));
+            |"break" ";": [Terminal(Token::Break(Range { start, .. })), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Break(None) })));
+            |"break" [Identifier] ";": [Terminal(Token::Break(Range { start, .. })), Terminal(Token::Identifier((_, label))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::Statement((*start..*end, Statement { position: *start..*end, statement: StatementItem::Break(Some(label.clone())) })));
+            |<ForStatement>: [NonTerminal(Symbol::ForStatement((position, for_statement)))] => Ok(Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::For(mem::take(for_statement)) })));
+            |<WhileStatement>: [NonTerminal(Symbol::WhileStatement((position, while_statement)))] => Ok(Symbol::Statement((position.clone(), Statement { position: position.clone(), statement: StatementItem::While(mem::take(while_statement)) })));
         <StatementList>::=<Statement>: [NonTerminal(Symbol::Statement((position, statement)))] => Ok(Symbol::StatementList((position.clone(), vec![mem::take(statement)])));
-           |<StatementList> <Statement>: [NonTerminal(Symbol::StatementList((Range { start, .. }, list))), NonTerminal(Symbol::Statement((Range { end, .. }, statement)))] => Ok(Symbol::StatementList((*start..*end, {
+            |<StatementList> <Statement>: [NonTerminal(Symbol::StatementList((Range { start, .. }, list))), NonTerminal(Symbol::Statement((Range { end, .. }, statement)))] => Ok(Symbol::StatementList((*start..*end, {
                     list.push(mem::take(statement));
                     mem::take(list)
                 })));
@@ -567,35 +567,32 @@ parser! {
                     statements: Vec::new(),
                     last_expression: None,
                 })));
-        <Expression8>::=[Identifier]: [Terminal(Token::Identifier((position, variable)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(Path { position: position.clone(), path: vec![variable.clone()] }) })));
+        <Expression8>::=<FullPath>: [NonTerminal(Symbol::FullPath((position, path)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(mem::take(path)) })));
             |[StringImmediate]: [Terminal(Token::StringImmediate((position, value)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::StringImmediate(value.clone()) })));
             |[NumberImmediate]: [Terminal(Token::NumberImmediate((position, value)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::NumberImmediate(*value) })));
             |<Expression8> "." <FullPath> "(" ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(mem::take(path)), Vec::new()) })));
-            |<Expression8> "." [Identifier] "(" ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::Identifier((position, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(Path { position: position.clone(), path: vec![path.clone()] }), Vec::new()) })));
             |<FullPath> "(" ")": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(None, Some(mem::take(path)), Vec::new()) })));
-            |[Identifier] "(" ")": [Terminal(Token::Identifier((position, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((position.start..*end, Expression { position: position.start..*end, expression: ExpressionItem::CallFunction(None, Some(Path { position: position.clone(), path: vec![path.clone()] }), Vec::new()) })));
             |<Expression8> "." "(" ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), None, Vec::new()) })));
             |<Expression8> "." <FullPath> "(" <Expression> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(mem::take(path)), vec![mem::take(argument)]) })));
-            |<Expression8> "." [Identifier] "(" <Expression> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::Identifier((position, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(Path { position: position.clone(), path: vec![path.clone()] }), vec![mem::take(argument)]) })));
             |<FullPath> "(" <Expression> ")": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(None, Some(mem::take(path)), vec![mem::take(argument)]) })));
-            |[Identifier] "(" <Expression> ")": [Terminal(Token::Identifier((position, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((position.start..*end, Expression { position: position.start..*end, expression: ExpressionItem::CallFunction(None, Some(Path { position: position.clone(), path: vec![path.clone()] }), vec![mem::take(argument)]) })));
             |<Expression8> "." "(" <Expression> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), None, vec![mem::take(argument)]) })));
             |<Expression8> "." [Identifier]: [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::Identifier((Range { end, .. }, member)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::AccessMember(Box::new(mem::take(expression)), member.clone()) })));
+            |<Expression8> "." [TupleIndex]: [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::TupleIndex((Range { end, .. }, index)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::AccessTupleItem(Box::new(mem::take(expression)), *index) })));
             |<Expression8> "." <FullPath> "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(mem::take(path)), mem::take(arguments)) })));
-            |<Expression8> "." [Identifier] "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::Identifier((position, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(Path { position: position.clone(), path: vec![path.clone()] }), mem::take(arguments)) })));
             |<FullPath> "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(None, Some(mem::take(path)), mem::take(arguments)) })));
-            |[Identifier] "(" <CommaSeparatedExpressions> ")": [Terminal(Token::Identifier((position, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((position.start..*end, Expression { position: position.start..*end, expression: ExpressionItem::CallFunction(None, Some(Path { position: position.clone(), path: vec![path.clone()] }), mem::take(arguments)) })));
             |<Expression8> "." "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), None, mem::take(arguments)) })));
             |<Expression8> "[" <Expression> "]": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::Expression((_, index))), Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Indexer(Box::new(mem::take(expression)), Box::new(mem::take(index))) })));
             |"(" <CommaSeparatedExpressions> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(mem::take(expressions)) })));
+            |"(" <CommaSeparatedExpressions> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(mem::take(expressions)) })));
             |"[" <CommaSeparatedExpressions> "]": [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(mem::take(expressions)) })));
+            |"[" <CommaSeparatedExpressions> "," "]": [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), _, Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(mem::take(expressions)) })));
             |"(" <Expression> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(vec![mem::take(item)]) })));
             |"[" <Expression> "]": [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(vec![mem::take(item)]) })));
+            |"[" <Expression> "," "]": [Terminal(Token::SquareBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), _, Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(vec![mem::take(item)]) })));
             |"(" ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(Vec::new()) })));
             |"[" "]": [Terminal(Token::SquareBracketOpen(Range { start, .. })), Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructArray(Vec::new()) })));
             |"(" <Expression> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, item))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, mem::take(item))));
             |<Block>: [NonTerminal(Symbol::Block((position, block)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::Block(mem::take(block)) })));
-            |<FullPath>: [NonTerminal(Symbol::FullPath((position, path)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(mem::take(path)) })));
             |<ConstructStruct>: [NonTerminal(Symbol::ConstructStruct((position, item)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::ConstructStruct(mem::take(item)) })));
         <Expression7>::=<Expression8>: [NonTerminal(Symbol::Expression8(item))] => Ok(Symbol::Expression7(mem::take(item)));
             |"-" <Expression7>: [Terminal(Token::Sub(Range { start, .. })), NonTerminal(Symbol::Expression7((Range { end, .. }, expression)))] => Ok(Symbol::Expression7((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Neg(Box::new(mem::take(expression))) })));
@@ -648,9 +645,17 @@ parser! {
             |[Identifier] ":" "while" <Expression> <Block>: [Terminal(Token::Identifier((Range { start, .. }, label))), _, _, NonTerminal(Symbol::Expression((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] => Ok(Symbol::WhileStatement((*start..*end, WhileStatement { label: Some(label.clone()), position: *start..*end, condition: Condition::BoolExpression(mem::take(condition)), block: mem::take(block) })));
             |[Identifier] ":" "while" <LetBinding> <Block>: [Terminal(Token::Identifier((Range { start, .. }, label))), _, _, NonTerminal(Symbol::LetBinding((_, condition))), NonTerminal(Symbol::Block((Range { end, .. }, block)))] => Ok(Symbol::WhileStatement((*start..*end, WhileStatement { label: Some(label.clone()), position: *start..*end, condition: Condition::LetBinding(mem::take(condition)), block: mem::take(block) })));
         <Pattern>::=[Identifier]: [Terminal(Token::Identifier((position, pattern)))] => Ok(Symbol::Pattern((position.clone(), Pattern::Variable(pattern.clone()))));
+            |"(" <Pattern> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Pattern((_, inner_pattern))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Pattern((*start..*end, mem::take(inner_pattern))));
+            |"(" <CommaSeparatedPatterns> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedPatterns((_, patterns))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Pattern((*start..*end, Pattern::Tuple(mem::take(patterns)))));
+            |"(" <CommaSeparatedPatterns> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedPatterns((_, patterns))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Pattern((*start..*end, Pattern::Tuple(mem::take(patterns)))));
             |<StructName> "{" "}": [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] => Ok(Symbol::Pattern((*start..*end, Pattern::Struct(mem::take(name), Vec::new()))));
             |<StructName> "{" <PatternStructItems> "}": [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::PatternStructItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] => Ok(Symbol::Pattern((*start..*end, Pattern::Struct(mem::take(name), mem::take(items)))));
             |<StructName> "{" <PatternStructItems> "," "}": [NonTerminal(Symbol::StructName((Range { start, .. }, name))), _, NonTerminal(Symbol::PatternStructItems((_, items))), _, Terminal(Token::WaveBracketClose(Range { end, .. }))] => Ok(Symbol::Pattern((*start..*end, Pattern::Struct(mem::take(name), mem::take(items)))));
+        <CommaSeparatedPatterns>::=<Pattern> "," <Pattern>: [NonTerminal(Symbol::Pattern((Range { start, ..}, pattern1))), _, NonTerminal(Symbol::Pattern((Range { end, .. }, pattern2)))] => Ok(Symbol::CommaSeparatedPatterns((*start..*end, vec![mem::take(pattern1), mem::take(pattern2)])));
+            |<CommaSeparatedPatterns> "," <Pattern>: [NonTerminal(Symbol::CommaSeparatedPatterns((Range { start, ..}, patterns))), _, NonTerminal(Symbol::Pattern((Range { end, .. }, pattern)))] => {
+                    patterns.push(mem::take(pattern));
+                    Ok(Symbol::CommaSeparatedPatterns((*start..*end, mem::take(patterns))))
+                };
         <PatternStructItems>::=[Identifier]: [Terminal(Token::Identifier((position, name)))] => Ok(Symbol::PatternStructItems((position.clone(), vec![(name.clone(), Pattern::Variable(name.clone()))])));
             |[Identifier] ":" <Pattern>: [Terminal(Token::Identifier((Range { start, .. }, name))), _, NonTerminal(Symbol::Pattern((Range { end, .. }, pattern)))] => Ok(Symbol::PatternStructItems((*start..*end, vec![(name.clone(), mem::take(pattern))])));
             |<PatternStructItems> "," [Identifier]: [NonTerminal(Symbol::PatternStructItems((Range { start, .. }, items))), _, Terminal(Token::Identifier((Range { end, .. }, name)))] => Ok(Symbol::PatternStructItems((*start..*end, {
@@ -661,14 +666,14 @@ parser! {
                     items.push((name.clone(), mem::take(pattern)));
                     mem::take(items)
                 })));
-        <ClosureArguments>::=[Identifier]: [Terminal(Token::Identifier((position, name)))] => Ok(Symbol::ClosureArguments((position.clone(), vec![(name.clone(), None)])));
-            |[Identifier] ":" <Type>: [Terminal(Token::Identifier((Range { start, .. }, name))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::ClosureArguments((*start..*end, vec![(name.clone(), Some(mem::take(t)))])));
-            |<ClosureArguments> "," [Identifier]: [NonTerminal(Symbol::ClosureArguments((Range { start, .. }, list))), _, Terminal(Token::Identifier((Range { end, .. }, name)))] => Ok(Symbol::ClosureArguments((*start..*end, {
-                    list.push((name.clone(), None));
+        <ClosureArguments>::=<Pattern>: [NonTerminal(Symbol::Pattern((position, pattern)))] => Ok(Symbol::ClosureArguments((position.clone(), vec![(mem::take(pattern), None)])));
+            |<Pattern> ":" <Type>: [NonTerminal(Symbol::Pattern((Range { start, .. }, pattern))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::ClosureArguments((*start..*end, vec![(mem::take(pattern), Some(mem::take(t)))])));
+            |<ClosureArguments> "," <Pattern>: [NonTerminal(Symbol::ClosureArguments((Range { start, .. }, list))), _, NonTerminal(Symbol::Pattern((Range { end, .. }, pattern)))] => Ok(Symbol::ClosureArguments((*start..*end, {
+                    list.push((mem::take(pattern), None));
                     mem::take(list)
                 })));
-        <ClosureArguments>::=<ClosureArguments> "," [Identifier] ":" <Type>: [NonTerminal(Symbol::ClosureArguments((Range { start, .. }, list))), _, Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::ClosureArguments((*start..*end, {
-                    list.push((name.clone(), Some(mem::take(t))));
+            |<ClosureArguments> "," <Pattern> ":" <Type>: [NonTerminal(Symbol::ClosureArguments((Range { start, .. }, list))), _, NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::ClosureArguments((*start..*end, {
+                    list.push((mem::take(pattern), Some(mem::take(t))));
                     mem::take(list)
                 })));
         <CommaSeparatedExpressions>::=<Expression> "," <Expression>: [NonTerminal(Symbol::Expression((Range { start, .. }, first))), _, NonTerminal(Symbol::Expression((Range { end, .. }, second)))] => Ok(Symbol::CommaSeparatedExpressions((*start..*end, vec![mem::take(first), mem::take(second)])));
@@ -700,9 +705,9 @@ parser! {
             |"fn" [Identifier] "(" ")" "|" "->" <Expression> ";": [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: Vec::new(), arguments: Vec::new(), return_type: Type::None, expression: mem::take(expression) })));
             |"fn" [Identifier] "::" "<" <GenericsTypeArguments> ">" "(" ")" "->" <Type> "|" "->" <Expression> ";": [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, _, NonTerminal(Symbol::Type((_, t))), Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: Vec::new(), return_type: mem::take(t), expression: mem::take(expression) })));
             |"fn" [Identifier] "::" "<" <GenericsTypeArguments> ">" "(" ")" "|" "->" <Expression> ";": [Terminal(Token::Fn(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, generics_arguments))), _, _, _, Terminal(Token::Or(_)), _, NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::FunctionDefinition((*start..*end, Function { position: *start..*end, name: name.clone(), generics_arguments: mem::take(generics_arguments), arguments: Vec::new(), return_type: Type::None, expression: mem::take(expression) })));
-        <FunctionArguments>::=[Identifier] ":" <Type>: [Terminal(Token::Identifier((Range { start, .. }, name))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::FunctionArguments((*start..*end, vec![(name.clone(), mem::take(t))])));
-            |<FunctionArguments> "," [Identifier] ":" <Type>: [NonTerminal(Symbol::FunctionArguments((Range { start, .. }, list))), _, Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::FunctionArguments((*start..*end, {
-                    list.push((name.clone(), mem::take(t)));
+        <FunctionArguments>::=<Pattern> ":" <Type>: [NonTerminal(Symbol::Pattern((Range { start, .. }, pattern))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::FunctionArguments((*start..*end, vec![(mem::take(pattern), mem::take(t))])));
+            |<FunctionArguments> "," <Pattern> ":" <Type>: [NonTerminal(Symbol::FunctionArguments((Range { start, .. }, list))), _, NonTerminal(Symbol::Pattern((_, pattern))), _, NonTerminal(Symbol::Type((Range { end, .. }, t)))] => Ok(Symbol::FunctionArguments((*start..*end, {
+                    list.push((mem::take(pattern), mem::take(t)));
                     mem::take(list)
                 })));
         <ImportStatement>::="import" <ImportPath> ";": [Terminal(Token::Import(Range { start, .. })), NonTerminal(Symbol::ImportPath((_, path))), Terminal(Token::Semicolon(Range { end, .. }))] => Ok(Symbol::ImportStatement((*start..*end, mem::take(path))));

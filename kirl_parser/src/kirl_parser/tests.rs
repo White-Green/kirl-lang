@@ -31,6 +31,12 @@ fn my_function(self: #{value_a: int, value_b: (int | string) }){
     }
 }
 
+fn my_function2(#{value_a: a, value_b }: #{value_a: int, value_b: (int, string,) }){
+    var (n, s) = value_b;
+    var n = (n, s,).0th;
+    (a + n).println();
+}
+
 fn get_closure(ratio: int)->([int])->int |->
     fn: i: [int] |-> i.sum() * ratio;
 
@@ -41,6 +47,14 @@ fn to_string::<T>(obj: #{number: int, value: T}) -> #{number: string, value: T} 
 println("Hello, World!");
 var #{value_a, value_b} = my_function(10);
 #{value_a, value_b}.my_function();
+
+a:while true {
+    if value_a > 10 {
+        break a;
+    } else {
+        continue a;
+    }
+}
 
 struct MyStruct::<T> {
     value_a: [T],
@@ -62,8 +76,8 @@ struct MyStruct::<T> {
             .flat_map(|token| token.unwrap())
             .parse(&parser)
     };
-    if let Err(_) = parse(CODE) {
-        unreachable!("failed to parse {:?}", CODE);
+    if let Err(err) = parse(CODE) {
+        unreachable!("failed to parse {:?} by {:?}", CODE, err);
     }
     const CODE_1: &str = r#"fn my_function(value_a: int)-> #{value_a: int, value_b: string} {
     if value_a > 100 {
@@ -84,7 +98,7 @@ struct MyStruct::<T> {
                     name: "my_function".to_owned(),
                     generics_arguments: vec![],
                     arguments: vec![(
-                        "value_a".to_owned(),
+                        Pattern::Variable("value_a".to_owned()),
                         Type::NamedType(NamedType {
                             position: CharacterPosition::new(0, 24)..CharacterPosition::new(0, 27),
                             path: vec!["int".to_owned()],
