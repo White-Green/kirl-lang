@@ -227,7 +227,7 @@ impl HIRType {
             (HIRType::Unreachable, _) => true,
             (_, HIRType::Unreachable) => false,
             (HIRType::Named { path: path1, generics_arguments: arg1 }, HIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| ty1.is_a(ty2)),
-            (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.len() == items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
+            (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.len() >= items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Array(t1), HIRType::Array(t2)) => t1.is_a(t2),
             (HIRType::Function { arguments: arg1, result: res1 }, HIRType::Function { arguments: arg2, result: res2 }) => arg1.len() == arg2.len() && arg2.iter().zip(arg1).all(|(ty1, ty2)| ty1.is_a(ty2)) && res1.is_a(res2),
             (HIRType::AnonymousStruct(members1), HIRType::AnonymousStruct(members2)) => members2.iter().all(|(k, v2)| members1.get(k).map_or(false, |v1| v1.is_a(v2))),
