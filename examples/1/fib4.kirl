@@ -1,0 +1,5 @@
+import std::{io::println, num::{_add, _sub, _gt}};
+
+fn fib(n: Number) -> Number |-> if n < 2 { n } else { fib(n - 1) + fib(n - 2) };
+
+20.fib().println();

@@ -6,6 +6,7 @@
 !/kirl_parser
 !/kirl_semantic_analyzer
 !/kirl_stdlib
+!/examples
 !/Cargo.toml
 !/LICENSE
 !/README.md

@@ -1,0 +1,21 @@
+import std::{io::println, num::{_gt, _mul}};
+
+var msg: String = "this is a string message";
+
+msg.println();
+
+msg = {
+    var msg: Number = 0b_10_000_000_000;
+    msg.println();
+
+    if msg > 0xff {
+        var msg = "てすと用めっせーじ";
+        msg.println();
+    };
+
+    println(msg * 2);
+
+    "this is a new string message"
+};
+
+msg.println();

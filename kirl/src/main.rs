@@ -16,11 +16,14 @@ impl KirlFileResolver for OsFileResolver {
     }
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let matches = app_from_crate!().arg(Arg::with_name("entrypoint").help("kirl program file for entrypoint").takes_value(true).required(true)).get_matches();
     let entrypoint = matches.value_of("entrypoint").unwrap();
     match compile(&mut OsFileResolver, &entrypoint) {
-        Ok(executable) => exec(&executable),
-        Err(err) => println!("{}", err),
+        Ok(executable) => {
+            exec(&executable);
+            Ok(())
+        }
+        Err(err) => Err(format!("{}", err)),
     }
 }

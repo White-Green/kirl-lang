@@ -1,0 +1,5 @@
+fn f(s: String) {
+    "this is in function \"f\"".std::io::println();
+}
+
+f("test");

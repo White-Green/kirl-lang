@@ -1,0 +1,6 @@
+import std::io::println;
+
+fn f() {
+    println("this is in function \"f\" in subdir/sub2.kirl");
+    sub3::f();
+}

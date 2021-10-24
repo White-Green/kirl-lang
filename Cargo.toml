@@ -7,3 +7,6 @@ members = [
     "kirl_stdlib",
     "kirl_engine"
 ]
+
+[profile.dev]
+opt-level = 3

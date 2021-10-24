@@ -1,0 +1,14 @@
+import std::{io::println, num::{_add, _sub, _gt}};
+
+/*
+    n番目のフィボナッチ数を求める 
+*/
+fn fib(n: Number) -> Number {
+    return if n < 2 {
+        n
+    } else {
+        fib(n - 1) + fib(n - 2)
+    };
+}
+
+println(fib(20));

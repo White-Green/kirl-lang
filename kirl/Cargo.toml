@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[test]]
+name = "e2e_test"
+path = "tests/main.rs"
+
 [dependencies]
 clap = "2.33.3"
 anyhow = "1.0.43"
@@ -12,3 +16,8 @@ kirl_parser = { path = "../kirl_parser" }
 kirl_semantic_analyzer = { path = "../kirl_semantic_analyzer" }
 kirl_vm = { path = "../kirl_vm" }
 kirl_engine = { path = "../kirl_engine" }
+
+[dev-dependencies]
+tempfile = "3.2.0"
+assert_cmd = "2.0.2"
+predicates = "2.0.3"

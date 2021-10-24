@@ -1,0 +1,11 @@
+import std::{io::println, num::_add};
+
+fn get_value() -> #{ item1: Number, item2: String } |-> #{ item1: 1e+2 + 2e+1 + 8, item2: "test string" };
+
+var value = get_value();
+value.item1.println();
+value.item2.println();
+
+var #{ item1, item2: msg } = get_value();
+item1.println();
+msg.println();

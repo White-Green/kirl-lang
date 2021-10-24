@@ -1,0 +1,5 @@
+import std::io::println;
+import sub1::f;
+
+println("this is in main.kirl");
+f();

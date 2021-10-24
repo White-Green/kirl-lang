@@ -1,0 +1,14 @@
+import std::io::println;
+
+fn f(s: String) {
+    "this is in function \"f\":(String)->()".println();
+    s.println();
+}
+
+fn f(n: Number) {
+    "this is in function \"f\":(Number)->()".println();
+    n.println();
+}
+
+f("string");
+f(256);
