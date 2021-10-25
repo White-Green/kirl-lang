@@ -253,3 +253,26 @@ test string
 test string
 ";
 }
+
+create_test! {
+    name: test_7;
+    map: {
+        7: {
+            main
+        }
+    };
+    entry: "7/main.kirl";
+    out: "1
+string_1
+2
+string_2
+3
+string_3
+1
+string_1
+3
+string_3
+2
+string_2
+";
+}

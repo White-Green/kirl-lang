@@ -1,0 +1,20 @@
+import std::io::println;
+
+fn tuple_function(tuple: (Number, String), ((num1, str1), num2, str2): ((Number, String), Number, String,)) -> (Number, String, (Number, String), Number, String,) {
+    tuple.0th.println();
+    tuple. 1st.println();
+    num1.println();
+    str1.println();
+    num2.println();
+    str2.println();
+    (tuple.0th, tuple.1st, (num2, str2), num1, str1)
+}
+
+var (a, b, c, e, f) = tuple_function((1, "string_1", "expect_ignored"), ((2, "string_2"), 3, "string_3"));
+var (c, d) = c;
+a.println();
+b.println();
+c.println();
+d.println();
+e.println();
+f.println();
