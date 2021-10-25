@@ -88,7 +88,7 @@ pub fn exec(
             KirlByteCodeOpcode::AccessTupleItem => {
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
-                let value = Vec::<Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(value).expect("");
+                let value = Box::<[Arc<RwLock<dyn KirlVMValueCloneable>>]>::try_from_kirl_value(value).expect("");
                 let value = value.read().expect("");
                 let value = Arc::clone(&value[operand as usize]);
                 local_stack.push(value);
@@ -105,7 +105,7 @@ pub fn exec(
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
                 let dest = local_stack.pop().expect("");
-                let dest = Vec::<Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(dest).expect("");
+                let dest = Box::<[Arc<RwLock<dyn KirlVMValueCloneable>>]>::try_from_kirl_value(dest).expect("");
                 dest.write().expect("")[operand as usize] = value;
             }
             KirlByteCodeOpcode::AssignMember => {
@@ -132,7 +132,7 @@ pub fn exec(
                 for _ in 0..operand {
                     result.push(local_stack.pop().expect(""));
                 }
-                local_stack.push(Arc::new(RwLock::new(result)));
+                local_stack.push(Arc::new(RwLock::new(result.into_boxed_slice())));
             }
             KirlByteCodeOpcode::ConstructArray => {
                 let operand = instruction.operand();

@@ -264,6 +264,20 @@ impl KirlVMValue for Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> {
     }
 }
 
+impl KirlVMValue for Box<[Arc<RwLock<dyn KirlVMValueCloneable>>]> {
+    fn static_type() -> Cow<'static, LIRType>
+    where
+        Self: Sized,
+    {
+        static TYPE: Lazy<LIRType> = Lazy::new(|| get_type!([()]).into_normalized());
+        Cow::Borrowed(&TYPE)
+    }
+
+    fn get_type(&self) -> Cow<LIRType> {
+        Cow::Owned(LIRType::Tuple(self.iter().map(|value| value.read().unwrap().get_type().into_owned()).collect()))
+    }
+}
+
 impl KirlVMValue for HashMap<String, Arc<RwLock<dyn KirlVMValueCloneable>>> {
     fn static_type() -> Cow<'static, LIRType>
     where
