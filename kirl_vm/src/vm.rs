@@ -15,6 +15,7 @@ pub fn exec(
         rust_functions,
         function_pointers,
         member_names,
+        types,
     }: &KirlVMExecutable,
 ) {
     let mut local_stack = Vec::new();
@@ -23,6 +24,7 @@ pub fn exec(
     let mut global_stack_offset_stack = Vec::new();
     let mut program_counter_stack = Vec::new();
     let mut program_counter = *entry_point;
+    let mut additional_operand = Vec::new();
     loop {
         let instruction = bytecodes[program_counter];
         match instruction.opcode() {
@@ -51,7 +53,13 @@ pub fn exec(
                 }
             }
             KirlByteCodeOpcode::JumpIfHasType => {
-                todo!()
+                let ty = &types[additional_operand.pop().expect("") as usize];
+                let condition = local_stack.last().expect("");
+                if condition.read().unwrap().get_type().is_a(ty) {
+                    let operand = instruction.operand_signed();
+                    program_counter = ((program_counter as isize) + (operand as isize)) as usize;
+                    continue;
+                }
             }
             KirlByteCodeOpcode::Jump => {
                 let operand = instruction.operand_signed();
@@ -141,6 +149,10 @@ pub fn exec(
                     result.push(local_stack.pop().expect(""));
                 }
                 local_stack.push(Arc::new(RwLock::new(result)));
+            }
+            KirlByteCodeOpcode::PushAdditionalOperand => {
+                let operand = instruction.operand();
+                additional_operand.push(operand);
             }
         }
         program_counter += 1;

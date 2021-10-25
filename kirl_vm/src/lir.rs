@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use kirl_semantic_analyzer::{HIRExpression, HIRStatement, HIRType, Immediate, ReferenceAccess, Variable};
 
-#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
+#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq, Hash)]
 pub enum LIRType {
     Unreachable,
     Named { path: Vec<String>, generics_arguments: Vec<LIRType> },
@@ -333,8 +333,10 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                             convert_list(other_statements, result, sequence, loop_labels)?;
                             push_variable(other_result, result);
                             result.push(LIRInstruction::Jump(end_label.clone()).into());
-                            result.push(LIRStatement { label: Some(then_label), instruction: LIRInstruction::Nop });
-                            result.push(LIRInstruction::Store(condition_binding).into());
+                            result.push(LIRStatement {
+                                label: Some(then_label),
+                                instruction: LIRInstruction::Store(condition_binding),
+                            });
                             convert_list(then_statements, result, sequence, loop_labels)?;
                             push_variable(then_result, result);
                             result.push(LIRStatement { label: Some(end_label), instruction: LIRInstruction::Nop });

@@ -35,6 +35,7 @@ pub enum KirlByteCodeOpcode {
     ConstructStruct,
     ConstructTuple,
     ConstructArray,
+    PushAdditionalOperand,
 }
 
 impl KirlByteCode {
@@ -269,7 +270,7 @@ impl KirlVMValue for Box<[Arc<RwLock<dyn KirlVMValueCloneable>>]> {
     where
         Self: Sized,
     {
-        static TYPE: Lazy<LIRType> = Lazy::new(|| get_type!([()]).into_normalized());
+        static TYPE: Lazy<LIRType> = Lazy::new(|| get_type!(()).into_normalized());
         Cow::Borrowed(&TYPE)
     }
 
@@ -311,6 +312,7 @@ pub struct KirlVMExecutable {
     pub(crate) rust_functions: Vec<Arc<Mutex<dyn KirlRustFunction>>>,
     pub(crate) function_pointers: Vec<usize>,
     pub(crate) member_names: Vec<String>,
+    pub(crate) types: Vec<LIRType>,
 }
 
 impl KirlVMExecutable {
@@ -320,10 +322,11 @@ impl KirlVMExecutable {
         let mut bytecodes = Vec::new();
         let mut function_pointers = HashMap::new();
         let mut member_name_map = HashMap::new();
+        let mut type_map = HashMap::new();
         let mut function_references = HashMap::new();
         for (function_id, function_body) in functions {
             function_pointers.insert(function_id, bytecodes.len());
-            let (bytecode, function_reference) = lir_to_bytecode(function_body, &mut member_name_map, &mut static_value_generators, &static_value_index, &rust_function_index);
+            let (bytecode, function_reference) = lir_to_bytecode(function_body, &mut member_name_map, &mut type_map, &mut static_value_generators, &static_value_index, &rust_function_index);
             function_references.extend(function_reference.into_iter().map(|(index, id)| (index + bytecodes.len(), id)));
             bytecodes.extend(bytecode);
         }
@@ -333,11 +336,12 @@ impl KirlVMExecutable {
             let opcode = bytecodes[index].0;
             bytecodes[index] = KirlByteCode::new(opcode, function_pointer);
         }
-        let mut member_names = Vec::with_capacity(member_name_map.len());
-        for (name, index) in member_name_map {
-            member_names.resize_with(member_names.len().max(index as usize + 1), Default::default);
-            member_names[index as usize] = name;
-        }
+        let mut member_names = member_name_map.into_iter().collect::<Vec<_>>();
+        member_names.sort_unstable_by_key(|(_, index)| *index);
+        let member_names = member_names.into_iter().map(|(name, _)| name).collect();
+        let mut types = type_map.into_iter().collect::<Vec<_>>();
+        types.sort_unstable_by_key(|(_, index)| *index);
+        let types = types.into_iter().map(|(ty, _)| ty).collect();
         KirlVMExecutable {
             bytecodes,
             entry_point: function_pointers[function_pointer_reference[&main_function] as usize],
@@ -345,11 +349,12 @@ impl KirlVMExecutable {
             rust_functions,
             function_pointers,
             member_names,
+            types,
         }
     }
 }
 
-fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map: &mut HashMap<String, u32>, static_value_generators: &mut Vec<StaticValueGenerator>, static_value_index: &HashMap<Uuid, u32>, rust_function_index: &HashMap<Uuid, u32>) -> (impl IntoIterator<Item = KirlByteCode>, impl IntoIterator<Item = (usize, Uuid)>) {
+fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map: &mut HashMap<String, u32>, type_map: &mut HashMap<LIRType, u32>, static_value_generators: &mut Vec<StaticValueGenerator>, static_value_index: &HashMap<Uuid, u32>, rust_function_index: &HashMap<Uuid, u32>) -> (impl IntoIterator<Item = KirlByteCode>, impl IntoIterator<Item = (usize, Uuid)>) {
     let mut result = Vec::new();
     let mut label_position_map = HashMap::new();
     let mut position_label_map = HashMap::new();
@@ -385,9 +390,9 @@ fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map:
                 result.push(KirlByteCode::without_operand(KirlByteCodeOpcode::JumpIfTrue));
             }
             LIRInstruction::JumpIfHasType(ty, label) => {
-                result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, static_value_generators.len() as u32));
-                let ty = Arc::new(RwLock::new(ty)) as Arc<RwLock<dyn KirlVMValueCloneable>>;
-                static_value_generators.push(Arc::new(move || Arc::clone(&ty)));
+                let type_map_len = type_map.len() as u32;
+                let type_index = *type_map.entry(ty.into_normalized()).or_insert(type_map_len);
+                result.push(KirlByteCode::new(KirlByteCodeOpcode::PushAdditionalOperand, type_index));
                 position_label_map.insert(result.len(), label);
                 result.push(KirlByteCode::without_operand(KirlByteCodeOpcode::JumpIfHasType));
             }

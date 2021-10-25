@@ -267,7 +267,73 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             result_type.normalize();
                             (result_type, if unreachable { Reachable::Unreachable } else { Reachable::Reachable })
                         }
-                        HIRExpression::IfLet { .. } => return Err(DecisionTypeError::UnImplementedFeature("type checking for if-var expression")),
+                        HIRExpression::IfLet {
+                            condition_binding,
+                            pattern_type,
+                            condition,
+                            then: (then_statements, then_expr),
+                            other: (other_statements, other_expr),
+                        } => {
+                            match condition {
+                                Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                    if candidates.len() != 1 {
+                                        return Err(DecisionTypeError::NamedReferenceIsNotUnique {
+                                            position: position.clone(),
+                                            found: ResolvedItems(mem::take(paths), mem::take(candidates)),
+                                        });
+                                    }
+                                }
+                                Variable::Unnamed(id) => {
+                                    if !pattern_type.is_a(&types[*id]) {
+                                        eprintln!("warning in type_checking: {}", DecisionTypeError::TypeMismatched { expected: pattern_type.clone(), actual: types[*id].clone() });
+                                    }
+                                }
+                            }
+                            types[*condition_binding] = pattern_type.clone();
+                            let mut unreachable = true;
+                            let then_type = match decision_type_inner(then_statements, types, return_type)? {
+                                Reachable::Unreachable => HIRType::Unreachable,
+                                Reachable::Reachable => {
+                                    unreachable = false;
+                                    match then_expr {
+                                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                            if candidates.len() == 1 {
+                                                candidates.first().unwrap().2.clone()
+                                            } else {
+                                                return Err(DecisionTypeError::NamedReferenceIsNotUnique {
+                                                    position: position.clone(),
+                                                    found: ResolvedItems(mem::take(paths), mem::take(candidates)),
+                                                });
+                                            }
+                                        }
+                                        Variable::Unnamed(id) => types[*id].clone(),
+                                    }
+                                }
+                            };
+                            let other_type = match decision_type_inner(other_statements, types, return_type)? {
+                                Reachable::Unreachable => HIRType::Unreachable,
+                                Reachable::Reachable => {
+                                    unreachable = false;
+                                    match other_expr {
+                                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                            if candidates.len() == 1 {
+                                                candidates.first().unwrap().2.clone()
+                                            } else {
+                                                return Err(DecisionTypeError::NamedReferenceIsNotUnique {
+                                                    position: position.clone(),
+                                                    found: ResolvedItems(mem::take(paths), mem::take(candidates)),
+                                                });
+                                            }
+                                        }
+                                        Variable::Unnamed(id) => types[*id].clone(),
+                                    }
+                                }
+                            };
+                            let mut result_type = HIRType::Or(vec![then_type, other_type]);
+                            result_type.normalize();
+                            (result_type, if unreachable { Reachable::Unreachable } else { Reachable::Reachable })
+                            // return Err(DecisionTypeError::UnImplementedFeature("type checking for if-var expression"));
+                        }
                         HIRExpression::Loop(inner) => {
                             decision_type_inner(inner, types, return_type)?;
                             (HIRType::Tuple(Vec::new()), Reachable::Reachable)
@@ -405,6 +471,9 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             (result_type, Reachable::Reachable)
                         }
                     };
+                    if !result_type.is_a(variable_type) {
+                        return Err(DecisionTypeError::TypeMismatched { expected: variable_type.clone(), actual: result_type });
+                    }
                     *variable_type = result_type.clone();
                     types[*variable_id] = result_type;
                     Ok(reachable)
