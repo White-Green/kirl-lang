@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use uuid::Uuid;
@@ -176,9 +176,9 @@ fn add_parsed_function<F: Error + Send + Sync + 'static>(function_types: &mut Ha
 }
 
 pub fn compile<F: KirlFileResolver>(file_resolver: &mut F, entry_point: impl AsRef<Path>) -> Result<KirlVMExecutable, KirlCompileError<F::ResolveError>> {
-    let mut stdlib = get_stdlib().lock().unwrap();
+    let stdlib = get_stdlib();
     let mut resolver = HashMap::new();
-    resolver.insert("std".to_string(), stdlib.deref_mut());
+    resolver.insert("std".to_string(), stdlib);
     let parser = KirlParser::new();
     let entry_point_body = file_resolver.resolve_file_by_path(&entry_point).map_err(KirlCompileError::FileResolveError)?;
     let syntax_tree = parser.parse(&entry_point_body)?;
@@ -208,6 +208,5 @@ pub fn compile<F: KirlFileResolver>(file_resolver: &mut F, entry_point: impl AsR
     )?;
     let lir = hir_to_lir(hir, 0)?;
     loaded_functions.insert(Uuid::nil(), lir);
-    drop(stdlib);
-    Ok(KirlVMExecutable::new(loaded_functions.into_iter().map(|(id, code)| (id, code.0)), None, &*get_stdlib().lock().unwrap(), Uuid::nil()))
+    Ok(KirlVMExecutable::new(loaded_functions.into_iter().map(|(id, code)| (id, code.0)), stdlib.static_values(), stdlib.functions(), Uuid::nil()))
 }

@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap};
-use std::ops::DerefMut;
 
 use uuid::Uuid;
 
@@ -13,7 +12,7 @@ pub trait KirlNameResolver {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)>;
 }
 
-impl<R: KirlNameResolver> KirlNameResolver for &mut R {
+impl<R: ?Sized + KirlNameResolver> KirlNameResolver for &mut R {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
         (*self).resolve(full_path)
     }
@@ -99,19 +98,13 @@ impl<R: KirlNameResolver> KirlNameResolver for [R] {
     }
 }
 
-impl<R: DerefMut> KirlNameResolver for HashMap<String, R>
-where
-    R::Target: KirlNameResolver,
-{
+impl<R: KirlNameResolver> KirlNameResolver for HashMap<String, R> {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
         full_path.first().and_then(|key| self.get_mut(key)).map(|resolver| resolver.resolve(&full_path[1..])).unwrap_or_default()
     }
 }
 
-impl<R: DerefMut> KirlNameResolver for BTreeMap<String, R>
-where
-    R::Target: KirlNameResolver,
-{
+impl<R: KirlNameResolver> KirlNameResolver for BTreeMap<String, R> {
     fn resolve(&mut self, full_path: &[String]) -> Vec<(Uuid, HIRType)> {
         full_path.first().and_then(|key| self.get_mut(key)).map(|resolver| resolver.resolve(&full_path[1..])).unwrap_or_default()
     }

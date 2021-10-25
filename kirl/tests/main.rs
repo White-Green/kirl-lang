@@ -1,10 +1,10 @@
+use assert_cmd::assert::OutputAssertExt;
+use assert_cmd::prelude::CommandCargoExt;
+use predicates::prelude::predicate;
 use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::process::Command;
-use assert_cmd::prelude::CommandCargoExt;
-use predicates::prelude::predicate;
 use tempfile::TempDir;
-use assert_cmd::assert::OutputAssertExt;
 
 #[derive(Debug)]
 enum FileMap {
