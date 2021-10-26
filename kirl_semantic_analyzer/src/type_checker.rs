@@ -274,7 +274,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             then: (then_statements, then_expr),
                             other: (other_statements, other_expr),
                         } => {
-                            let condition_type = match condition {
+                            let (possibility_assign, is_a, mut condition_type) = match condition {
                                 Variable::Named(position, ResolvedItems(paths, candidates)) => {
                                     candidates.retain(|(_, _, ty)| ty.is_a(pattern_type));
                                     if candidates.len() != 1 {
@@ -283,10 +283,18 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                             found: ResolvedItems(mem::take(paths), mem::take(candidates)),
                                         });
                                     }
-                                    candidates[0].2.clone()
+                                    (true, true, candidates[0].2.clone())
                                 }
-                                Variable::Unnamed(id) => pattern_type.intersect_to(&types[*id]),
+                                Variable::Unnamed(id) => (types[*id].possibility_assignable_to(pattern_type), types[*id].is_a(pattern_type), pattern_type.intersect_to(&types[*id])),
                             };
+                            assert!(!is_a || possibility_assign); // is_a=trueなのにpossibility_assign=falseは無いよ
+                            if is_a {
+                                *other_statements = vec![HIRStatement::Unreachable];
+                            }
+                            if !possibility_assign {
+                                condition_type = condition_type.infer_temporary();
+                                *then_statements = vec![HIRStatement::Unreachable];
+                            }
                             types[*condition_binding] = condition_type.clone();
                             *pattern_type = condition_type;
                             let mut unreachable = true;
@@ -477,6 +485,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                     types[*variable_id] = variable_type.clone();
                     Ok(reachable)
                 }
+                HIRStatement::Unreachable => Ok(Reachable::Unreachable),
                 HIRStatement::Return(return_value) => {
                     match return_value {
                         Variable::Named(position, ResolvedItems(paths, candidates)) => {
@@ -570,6 +579,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                         HIRExpression::ConstructArray(items) => HIRExpression::ConstructArray(items.into_iter().map(into_one).collect()),
                     },
                 },
+                HIRStatement::Unreachable => HIRStatement::Unreachable,
                 HIRStatement::Return(value) => HIRStatement::Return(into_one(value)),
                 HIRStatement::Continue(label) => HIRStatement::Continue(label),
                 HIRStatement::Break(label) => HIRStatement::Break(label),
@@ -653,6 +663,7 @@ pub fn used_functions(statements: &[HIRStatement<(Uuid, HIRType)>]) -> HashSet<U
                         }
                     }
                 },
+                HIRStatement::Unreachable => {}
                 HIRStatement::Return(variable) => add_used_variable(variable, result),
                 HIRStatement::Continue(_) => {}
                 HIRStatement::Break(_) => {}

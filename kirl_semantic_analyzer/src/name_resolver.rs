@@ -254,6 +254,7 @@ impl Resolvable for HIRStatement<SearchPaths> {
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
             HIRStatement::Binding { variable_id, variable_type, expression } => HIRStatement::Binding { variable_id, variable_type, expression: expression.resolve(resolver) },
+            HIRStatement::Unreachable => HIRStatement::Unreachable,
             HIRStatement::Return(value) => HIRStatement::Return(value.resolve(resolver)),
             HIRStatement::Continue(label) => HIRStatement::Continue(label),
             HIRStatement::Break(label) => HIRStatement::Break(label),
@@ -263,6 +264,7 @@ impl Resolvable for HIRStatement<SearchPaths> {
     fn all_reference(&self) -> Vec<&[String]> {
         match self {
             HIRStatement::Binding { expression, .. } => expression.all_reference(),
+            HIRStatement::Unreachable => Vec::new(),
             HIRStatement::Return(value) => value.all_reference(),
             HIRStatement::Continue(_) => Vec::new(),
             HIRStatement::Break(_) => Vec::new(),

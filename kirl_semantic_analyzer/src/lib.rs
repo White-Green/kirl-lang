@@ -75,6 +75,7 @@ impl<Reference> From<HIRStatementList<Reference>> for Vec<HIRStatement<Reference
 #[derive(Debug, PartialEq, Clone)]
 pub enum HIRStatement<Reference> {
     Binding { variable_id: usize, variable_type: HIRType, expression: HIRExpression<Reference> },
+    Unreachable,
     Return(Variable<Reference>),
     Continue(Option<String>),
     Break(Option<String>),
@@ -389,6 +390,34 @@ impl HIRType {
             (ty1, _) => ty1.clone(),
         }
     }
+
+    pub fn possibility_assignable_to(&self, target: &HIRType) -> bool {
+        match (self, target) {
+            (ty1, ty2) if ty1 == ty2 => true,
+            (HIRType::Infer, _) | (_, HIRType::Infer) => true,
+            (HIRType::Tuple(items1), HIRType::Tuple(items2)) if items1.len() >= items2.len() => items1.iter().zip(items2).all(|(ty1, ty2)| ty1.possibility_assignable_to(ty2)),
+            (HIRType::Array(ty1), HIRType::Array(ty2)) => ty1.possibility_assignable_to(ty2),
+            (HIRType::AnonymousStruct(members1), HIRType::AnonymousStruct(members2)) => members2.iter().all(|(key, ty2)| members1.get(key).map(|ty1| ty1.possibility_assignable_to(ty2)).unwrap_or_default()),
+            (HIRType::Or(types), ty2) => types.iter().any(|ty1| ty1.possibility_assignable_to(ty2)),
+            (ty1, HIRType::Or(types)) => types.iter().any(|ty2| ty1.possibility_assignable_to(ty2)),
+            _ => false,
+        }
+    }
+
+    fn infer_temporary(&self) -> HIRType {
+        match self {
+            HIRType::Infer => HIRType::Tuple(Vec::new()),
+            ty @ (HIRType::Unreachable | HIRType::Named { .. }) => ty.clone(),
+            HIRType::Tuple(items) => HIRType::Tuple(items.iter().map(HIRType::infer_temporary).collect()),
+            HIRType::Array(item) => HIRType::Array(Box::new(item.infer_temporary())),
+            HIRType::Function { arguments, result } => HIRType::Function {
+                arguments: arguments.iter().map(HIRType::infer_temporary).collect(),
+                result: Box::new(result.infer_temporary()),
+            },
+            HIRType::AnonymousStruct(members) => HIRType::AnonymousStruct(members.iter().map(|(k, ty)| (k.clone(), ty.infer_temporary())).collect()),
+            HIRType::Or(items) => HIRType::Or(items.iter().map(HIRType::infer_temporary).collect()),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -579,6 +608,7 @@ where
             HIRStatement::Binding { variable_id, variable_type, expression } => {
                 format!("let ${}: {} = {};", variable_id, ToString::to_string(variable_type), ToString::to_string(expression))
             }
+            HIRStatement::Unreachable => "unreachable".to_string(),
             HIRStatement::Return(variable) => {
                 format!("return {};", ToString::to_string(variable))
             }
@@ -1289,19 +1319,19 @@ mod tests {
 
         assert!(Function {
             arguments: vec![Tuple(vec![])],
-            result: Box::new(Tuple(vec![Tuple(vec![])]))
+            result: Box::new(Tuple(vec![Tuple(vec![])])),
         }
         .is_a(&Function {
             arguments: vec![Tuple(vec![Tuple(vec![])])],
-            result: Box::new(Tuple(vec![]))
+            result: Box::new(Tuple(vec![])),
         }));
         assert!(!Function {
             arguments: vec![Tuple(vec![]), Tuple(vec![])],
-            result: Box::new(Tuple(vec![Tuple(vec![])]))
+            result: Box::new(Tuple(vec![Tuple(vec![])])),
         }
         .is_a(&Function {
             arguments: vec![Tuple(vec![Tuple(vec![])])],
-            result: Box::new(Tuple(vec![]))
+            result: Box::new(Tuple(vec![])),
         }));
 
         assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), Tuple(vec![Tuple(vec![])])), ("b".to_string(), Tuple(vec![]))])).is_a(&AnonymousStruct(BTreeMap::from([("a".to_string(), Tuple(vec![]))]))));
@@ -1380,9 +1410,34 @@ mod tests {
                 AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple1.clone())])),
                 AnonymousStruct(BTreeMap::from([("a".to_string(), tuple1.clone()), ("b".to_string(), tuple0.clone())])),
                 AnonymousStruct(BTreeMap::from([("b".to_string(), tuple1.clone())])),
-                tuple0.clone()
+                tuple0.clone(),
             ])),
             AnonymousStruct(BTreeMap::from([("a".to_string(), Or(vec![tuple0.clone(), tuple1.clone()])), ("b".to_string(), tuple0.clone())]))
         );
+    }
+
+    #[test]
+    fn test_type_possibility_assignable_to() {
+        use HIRType::*;
+        let tuple0 = Tuple(vec![]);
+        let tuple1 = Tuple(vec![tuple0.clone()]);
+        let tuple2 = Tuple(vec![tuple0.clone(), tuple0.clone()]);
+        assert!(Infer.possibility_assignable_to(&Infer));
+        assert!(Infer.possibility_assignable_to(&tuple0));
+        assert!(tuple0.possibility_assignable_to(&Infer));
+
+        assert!(Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple0.clone()))));
+        assert!(Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple1.clone()))));
+        assert!(!Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple2.clone()))));
+
+        assert!(tuple1.possibility_assignable_to(&Or(vec![tuple1.clone(), tuple2.clone()])));
+        assert!(Or(vec![tuple1.clone(), tuple2.clone()]).possibility_assignable_to(&tuple1));
+        assert!(tuple1.possibility_assignable_to(&Or(vec![tuple0.clone(), tuple2.clone()])));
+        assert!(Or(vec![tuple0.clone(), tuple2.clone()]).possibility_assignable_to(&tuple1));
+
+        assert!(!AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone())])).possibility_assignable_to(&AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())]))));
+        assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple1.clone())])).possibility_assignable_to(&AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())]))));
+        assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple1.clone())])).possibility_assignable_to(&Or(vec![AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())])), tuple0.clone()])));
+        assert!(tuple2.possibility_assignable_to(&Or(vec![AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())])), tuple0.clone()])));
     }
 }

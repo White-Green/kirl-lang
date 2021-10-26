@@ -402,6 +402,7 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                     }
                     result.push(LIRInstruction::Store(variable_id).into());
                 }
+                HIRStatement::Unreachable => {}
                 HIRStatement::Return(value) => {
                     push_variable(value, result);
                     result.push(LIRInstruction::Return.into());
