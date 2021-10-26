@@ -164,6 +164,9 @@ impl TryFrom<HIRType> for LIRType {
                 Ok(LIRType::AnonymousStruct(result_members))
             }
             HIRType::Or(items) => {
+                if items.is_empty() {
+                    return Err(LIRTypeConvertError::UnSupportedType("Empty or-type"));
+                }
                 let mut result_items = Vec::with_capacity(items.len());
                 for hir_type in items {
                     result_items.push(hir_type.try_into()?);

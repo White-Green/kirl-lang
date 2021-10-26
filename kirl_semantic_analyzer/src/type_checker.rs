@@ -158,9 +158,9 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                         },
                         HIRExpression::AccessTupleItem { variable, index } => match variable {
                             Variable::Named(position, ResolvedItems(paths, candidates)) => {
-                                candidates.retain(|(_, _, ty)| ty.has_tuple_nth(*index));
+                                candidates.retain(|(_, _, ty)| ty.has_tuple_item(*index));
                                 if let [(_, _, ty)] = candidates.as_slice() {
-                                    (ty.tuple_nth_type(*index).unwrap().into_owned(), Reachable::Reachable)
+                                    (ty.tuple_item_type(*index).unwrap().into_owned(), Reachable::Reachable)
                                 } else {
                                     return Err(DecisionTypeError::NamedReferenceIsNotUnique {
                                         position: position.clone(),
@@ -169,7 +169,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 }
                             }
                             Variable::Unnamed(id) => {
-                                if let Some(ty) = types[*id].tuple_nth_type(*index) {
+                                if let Some(ty) = types[*id].tuple_item_type(*index) {
                                     (ty.into_owned(), Reachable::Reachable)
                                 } else {
                                     return Err(DecisionTypeError::TypeMismatched {
@@ -274,22 +274,21 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             then: (then_statements, then_expr),
                             other: (other_statements, other_expr),
                         } => {
-                            match condition {
+                            let condition_type = match condition {
                                 Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                    candidates.retain(|(_, _, ty)| ty.is_a(pattern_type));
                                     if candidates.len() != 1 {
                                         return Err(DecisionTypeError::NamedReferenceIsNotUnique {
                                             position: position.clone(),
                                             found: ResolvedItems(mem::take(paths), mem::take(candidates)),
                                         });
                                     }
+                                    candidates[0].2.clone()
                                 }
-                                Variable::Unnamed(id) => {
-                                    if !pattern_type.is_a(&types[*id]) {
-                                        eprintln!("warning in type_checking: {}", DecisionTypeError::TypeMismatched { expected: pattern_type.clone(), actual: types[*id].clone() });
-                                    }
-                                }
-                            }
-                            types[*condition_binding] = pattern_type.clone();
+                                Variable::Unnamed(id) => pattern_type.intersect_to(&types[*id]),
+                            };
+                            types[*condition_binding] = condition_type.clone();
+                            *pattern_type = condition_type;
                             let mut unreachable = true;
                             let then_type = match decision_type_inner(then_statements, types, return_type)? {
                                 Reachable::Unreachable => HIRType::Unreachable,
@@ -367,7 +366,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 ReferenceAccess::TupleItem(variable, index) => {
                                     if let Variable::Unnamed(variable) = variable {
                                         let variable_type = &types[*variable];
-                                        if let Some(ty) = variable_type.tuple_nth_type(*index) {
+                                        if let Some(ty) = variable_type.tuple_item_type(*index) {
                                             if value_type.is_a(&ty) {
                                                 (ty.into_owned(), Reachable::Reachable)
                                             } else {
@@ -474,8 +473,8 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                     if !result_type.is_a(variable_type) {
                         return Err(DecisionTypeError::TypeMismatched { expected: variable_type.clone(), actual: result_type });
                     }
-                    *variable_type = result_type.clone();
-                    types[*variable_id] = result_type;
+                    *variable_type = variable_type.intersect_to(&result_type);
+                    types[*variable_id] = variable_type.clone();
                     Ok(reachable)
                 }
                 HIRStatement::Return(return_value) => {
