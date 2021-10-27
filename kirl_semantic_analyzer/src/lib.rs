@@ -1288,17 +1288,6 @@ mod tests {
         println!("{}", statements_to_string(&statements));
     }
 
-    // pub enum HIRType {
-    //     Infer,
-    //     Unreachable,
-    //     Named { path: Vec<String>, generics_arguments: Vec<HIRType> },
-    //     Tuple(Vec<HIRType>),
-    //     Array(Box<HIRType>),
-    //     Function { arguments: Vec<HIRType>, result: Box<HIRType> },
-    //     AnonymousStruct(BTreeMap<String, HIRType>),
-    //     Or(Vec<HIRType>),
-    // }
-
     #[test]
     fn test_type_is_a() {
         use HIRType::*;

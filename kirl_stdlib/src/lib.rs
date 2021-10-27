@@ -153,29 +153,6 @@ impl KirlStdLib {
     }
 }
 
-// impl<'a> IntoIterator for &'a KirlStdLib {
-//     type Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>);
-//     type IntoIter = <Vec<(Uuid, Arc<Mutex<dyn KirlRustFunction>>)> as IntoIterator>::IntoIter;
-//
-//     fn into_iter(self) -> Self::IntoIter {
-//         fn add(item: &FunctionOrChildren, result: &mut Vec<(Uuid, Arc<Mutex<dyn KirlRustFunction>>)>) {
-//             match item {
-//                 FunctionOrChildren::Function(function, id, _) => result.push((*id, Arc::clone(function))),
-//                 FunctionOrChildren::Children(children) => {
-//                     for item in children.values().flatten() {
-//                         add(item, result);
-//                     }
-//                 }
-//             }
-//         }
-//         let mut result = Vec::new();
-//         for item in self.0.values().flatten() {
-//             add(item, &mut result);
-//         }
-//         result.into_iter()
-//     }
-// }
-
 macro_rules! count {
     ()=>{ 0 };
     ($t:ident)=>{ 1 };

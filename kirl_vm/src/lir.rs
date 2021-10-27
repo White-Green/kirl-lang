@@ -259,13 +259,6 @@ impl From<LIRTypeConvertError> for LIRStatementListConvertError {
     }
 }
 
-// impl TryFrom<HIRStatementList<(Uuid, HIRType)>> for LIRStatementList {
-//     type Error = LIRStatementListConvertError;
-//     fn try_from(HIRStatementList(statements): HIRStatementList<(Uuid, HIRType)>) -> Result<Self, Self::Error> {
-//         hir_to_lir(statements).map(Into::into)
-//     }
-// }
-
 pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count: usize) -> Result<LIRStatementList, LIRStatementListConvertError> {
     fn convert_list(statements: impl IntoIterator<Item = HIRStatement<(Uuid, HIRType)>>, result: &mut Vec<LIRStatement>, sequence: &mut usize, loop_labels: &mut Vec<String>) -> Result<(), LIRStatementListConvertError> {
         fn convert(statement: HIRStatement<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>, sequence: &mut usize, loop_labels: &mut Vec<String>) -> Result<(), LIRStatementListConvertError> {
