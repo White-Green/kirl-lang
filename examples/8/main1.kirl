@@ -1,0 +1,10 @@
+import std::io::{ print, println };
+
+var condition = ();
+
+if var #{ value } = condition {
+    "condition is #{ value: Number }\nvalue: ".print();
+    value.println();
+} else {
+    "condition is not #{ value: Number }".println();
+};

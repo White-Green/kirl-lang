@@ -276,3 +276,28 @@ string_3
 string_2
 ";
 }
+
+create_test! {
+    name: test_8_1;
+    map: {
+        8: {
+            main1
+        }
+    };
+    entry: "8/main1.kirl";
+    out: "condition is not #{ value: Number }
+";
+}
+
+create_test! {
+    name: test_8_2;
+    map: {
+        8: {
+            main2
+        }
+    };
+    entry: "8/main2.kirl";
+    out: "condition is #{ value: Number }
+value: 42
+";
+}
