@@ -212,10 +212,10 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
     KirlStdLib(map! {
         io: map! {
             print: FunctionWrapper::from(|s: String| Ok::<_, NoneError>(print!("{}", s))),
-            print: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(print!("{}", s))),
+            print: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(print!("{}", s.to_standard_notation_string()))),
             print: FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(print!("{}", s))),
             println: FunctionWrapper::from(|s: String| Ok::<_, NoneError>(println!("{}", s))),
-            println: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(println!("{}", s))),
+            println: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(println!("{}", s.to_standard_notation_string()))),
             println: FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(println!("{}", s))),
         },
         bool: map!{
