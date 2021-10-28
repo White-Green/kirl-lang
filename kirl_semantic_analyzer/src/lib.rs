@@ -395,9 +395,9 @@ impl HIRType {
         match (self, target) {
             (ty1, ty2) if ty1 == ty2 => true,
             (HIRType::Infer, _) | (_, HIRType::Infer) => true,
-            (HIRType::Tuple(items1), HIRType::Tuple(items2)) if items1.len() >= items2.len() => items1.iter().zip(items2).all(|(ty1, ty2)| ty1.possibility_assignable_to(ty2)),
+            (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.iter().zip(items2).all(|(ty1, ty2)| ty1.possibility_assignable_to(ty2)),
             (HIRType::Array(ty1), HIRType::Array(ty2)) => ty1.possibility_assignable_to(ty2),
-            (HIRType::AnonymousStruct(members1), HIRType::AnonymousStruct(members2)) => members2.iter().all(|(key, ty2)| members1.get(key).map(|ty1| ty1.possibility_assignable_to(ty2)).unwrap_or_default()),
+            (HIRType::AnonymousStruct(members1), HIRType::AnonymousStruct(members2)) => !members2.iter().any(|(key, ty2)| members1.get(key).map(|ty1| !ty1.possibility_assignable_to(ty2)).unwrap_or_default()),
             (HIRType::Or(types), ty2) => types.iter().any(|ty1| ty1.possibility_assignable_to(ty2)),
             (ty1, HIRType::Or(types)) => types.iter().any(|ty2| ty1.possibility_assignable_to(ty2)),
             _ => false,
@@ -1415,16 +1415,21 @@ mod tests {
         assert!(Infer.possibility_assignable_to(&tuple0));
         assert!(tuple0.possibility_assignable_to(&Infer));
 
+        assert!(tuple0.possibility_assignable_to(&tuple1));
+        assert!(tuple1.possibility_assignable_to(&tuple2));
+        assert!(!tuple1.possibility_assignable_to(&Tuple(vec![Array(Box::new(tuple0.clone()))])));
+
         assert!(Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple0.clone()))));
         assert!(Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple1.clone()))));
-        assert!(!Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple2.clone()))));
+        assert!(Array(Box::new(tuple1.clone())).possibility_assignable_to(&Array(Box::new(tuple2.clone()))));
 
         assert!(tuple1.possibility_assignable_to(&Or(vec![tuple1.clone(), tuple2.clone()])));
         assert!(Or(vec![tuple1.clone(), tuple2.clone()]).possibility_assignable_to(&tuple1));
         assert!(tuple1.possibility_assignable_to(&Or(vec![tuple0.clone(), tuple2.clone()])));
         assert!(Or(vec![tuple0.clone(), tuple2.clone()]).possibility_assignable_to(&tuple1));
 
-        assert!(!AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone())])).possibility_assignable_to(&AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())]))));
+        assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone())])).possibility_assignable_to(&AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())]))));
+        assert!(!AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone())])).possibility_assignable_to(&AnonymousStruct(BTreeMap::from([("a".to_string(), Array(Box::new(tuple0.clone()))), ("b".to_string(), tuple0.clone())]))));
         assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple1.clone())])).possibility_assignable_to(&AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())]))));
         assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple1.clone())])).possibility_assignable_to(&Or(vec![AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())])), tuple0.clone()])));
         assert!(tuple2.possibility_assignable_to(&Or(vec![AnonymousStruct(BTreeMap::from([("a".to_string(), tuple0.clone()), ("b".to_string(), tuple0.clone())])), tuple0.clone()])));
