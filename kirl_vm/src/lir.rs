@@ -134,6 +134,7 @@ impl TryFrom<HIRType> for LIRType {
         match ty {
             HIRType::Infer => Err(LIRTypeConvertError::UnSupportedType("Infer")),
             HIRType::Unreachable => Ok(LIRType::Unreachable),
+            HIRType::GenericsTypeArgument(_) => Err(LIRTypeConvertError::UnSupportedType("GenericsTypeArgument")),
             HIRType::Named { path, generics_arguments } => {
                 let mut result_generics_arguments = Vec::with_capacity(generics_arguments.len());
                 for hir_type in generics_arguments {

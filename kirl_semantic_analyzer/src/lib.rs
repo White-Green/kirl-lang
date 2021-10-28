@@ -124,6 +124,7 @@ pub enum HIRExpression<Reference> {
 pub enum HIRType {
     Infer,
     Unreachable,
+    GenericsTypeArgument(usize),
     Named { path: Vec<String>, generics_arguments: Vec<HIRType> },
     Tuple(Vec<HIRType>),
     Array(Box<HIRType>),
@@ -395,6 +396,7 @@ impl HIRType {
         match (self, target) {
             (ty1, ty2) if ty1 == ty2 => true,
             (HIRType::Infer, _) | (_, HIRType::Infer) => true,
+            (HIRType::GenericsTypeArgument(_), _) | (_, HIRType::GenericsTypeArgument(_)) => true,
             (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.iter().zip(items2).all(|(ty1, ty2)| ty1.possibility_assignable_to(ty2)),
             (HIRType::Array(ty1), HIRType::Array(ty2)) => ty1.possibility_assignable_to(ty2),
             (HIRType::AnonymousStruct(members1), HIRType::AnonymousStruct(members2)) => !members2.iter().any(|(key, ty2)| members1.get(key).map(|ty1| !ty1.possibility_assignable_to(ty2)).unwrap_or_default()),
@@ -407,7 +409,7 @@ impl HIRType {
     fn infer_temporary(&self) -> HIRType {
         match self {
             HIRType::Infer => HIRType::Tuple(Vec::new()),
-            ty @ (HIRType::Unreachable | HIRType::Named { .. }) => ty.clone(),
+            ty @ (HIRType::Unreachable | HIRType::GenericsTypeArgument(_) | HIRType::Named { .. }) => ty.clone(),
             HIRType::Tuple(items) => HIRType::Tuple(items.iter().map(HIRType::infer_temporary).collect()),
             HIRType::Array(item) => HIRType::Array(Box::new(item.infer_temporary())),
             HIRType::Function { arguments, result } => HIRType::Function {
@@ -492,6 +494,7 @@ impl ToString for HIRType {
         match self {
             HIRType::Infer => "$Infer".to_string(),
             HIRType::Unreachable => "!".to_string(),
+            HIRType::GenericsTypeArgument(i) => format!("$T{}", i),
             HIRType::Named { path, generics_arguments } => {
                 let generics_arguments = generics_arguments.iter().map(ToString::to_string).reduce(|a, b| format!("{}, {}", a, b)).map(|a| format!("::<{}>", a)).unwrap_or_default();
                 format!("{}{}", path.join("::"), generics_arguments)

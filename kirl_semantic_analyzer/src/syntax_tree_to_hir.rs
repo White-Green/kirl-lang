@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -16,6 +16,7 @@ pub enum AnalysisStatementError {
     TypeConvertError(HIRTypeConvertError),
     DuplicatedMember(String),
     CollisionArgumentName(usize, usize),
+    CollisionTypeArgumentName(usize, usize),
 }
 
 impl From<HIRTypeConvertError> for AnalysisStatementError {
@@ -31,6 +32,7 @@ impl Display for AnalysisStatementError {
             AnalysisStatementError::TypeConvertError(e) => e.fmt(f),
             AnalysisStatementError::DuplicatedMember(name) => write!(f, "member {:?} is duplicated", name),
             AnalysisStatementError::CollisionArgumentName(a, b) => write!(f, "{}th and {}th argument have same name.", a, b),
+            AnalysisStatementError::CollisionTypeArgumentName(a, b) => write!(f, "{}th and {}th type argument have same name.", a, b),
         }
     }
 }
@@ -50,21 +52,49 @@ fn get_candidate_paths(path: Vec<String>, imports: &BTreeMap<String, HashSet<Vec
     SearchPaths(Some(path.clone()).into_iter().chain(imports.get(path.first().unwrap()).into_iter().flatten().map(|base| base.iter().chain(path.iter().skip(1)).cloned().collect())).collect())
 }
 
-pub fn analysis_function(
-    WithImport {
-        import,
-        item: Function { position, arguments, return_type, expression, .. },
-    }: WithImport<Function>,
-) -> AnalysisStatementResult<(Vec<HIRStatement<SearchPaths>>, Vec<HIRType>, HIRType)> {
+fn apply_generics_type_argument(ty: HIRType, map: &HashMap<&str, usize>) -> HIRType {
+    match ty {
+        ty @ (HIRType::Infer | HIRType::Unreachable | HIRType::GenericsTypeArgument(_)) => ty,
+        HIRType::Named { path, generics_arguments } => {
+            if generics_arguments.is_empty() {
+                if let Some(index) = path.as_slice().try_into().ok().and_then(|[name]: &[_; 1]| map.get(name.as_str())) {
+                    return HIRType::GenericsTypeArgument(*index);
+                }
+            }
+            HIRType::Named { path, generics_arguments }
+        }
+        HIRType::Tuple(items) => HIRType::Tuple(items.into_iter().map(|ty| apply_generics_type_argument(ty, map)).collect()),
+        HIRType::Array(item) => HIRType::Array(Box::new(apply_generics_type_argument(*item, map))),
+        HIRType::Function { arguments, result } => HIRType::Function {
+            arguments: arguments.into_iter().map(|ty| apply_generics_type_argument(ty, map)).collect(),
+            result: Box::new(apply_generics_type_argument(*result, map)),
+        },
+        HIRType::AnonymousStruct(members) => HIRType::AnonymousStruct(members.into_iter().map(|(k, ty)| (k, apply_generics_type_argument(ty, map))).collect()),
+        HIRType::Or(items) => HIRType::Or(items.into_iter().map(|ty| apply_generics_type_argument(ty, map)).collect()),
+    }
+}
+
+pub fn analysis_function(WithImport { import, item }: WithImport<Function>) -> AnalysisStatementResult<(Vec<HIRStatement<SearchPaths>>, Vec<HIRType>, HIRType)> {
+    let Function { position, arguments, return_type, expression, generics_arguments, .. } = item;
+    let mut generics_argument_names = HashMap::<&str, _>::new();
+    for (i, name) in generics_arguments.iter().enumerate() {
+        if let Some(j) = generics_argument_names.insert(name, i) {
+            return Err(AnalysisStatementError::CollisionTypeArgumentName(j, i));
+        }
+    }
     let (names, types): (Vec<_>, Vec<_>) = arguments.into_iter().unzip();
-    Ok((analysis(vec![Statement { position, statement: StatementItem::Return(Some(expression)) }], names, import)?, types.into_iter().map(|ty| ty.try_into().expect("")).collect(), return_type.try_into().expect("")))
+    Ok((
+        analysis(vec![Statement { position, statement: StatementItem::Return(Some(expression)) }], names, import, &generics_argument_names)?,
+        types.into_iter().map(|ty| apply_generics_type_argument(ty.try_into().expect(""), &generics_argument_names)).collect(),
+        apply_generics_type_argument(return_type.try_into().expect(""), &generics_argument_names),
+    ))
 }
 
 pub fn analysis_statements(code: Vec<Statement>) -> AnalysisStatementResult<Vec<HIRStatement<SearchPaths>>> {
-    analysis(code, Vec::new(), ImportPath::List(Vec::new()))
+    analysis(code, Vec::new(), ImportPath::List(Vec::new()), &HashMap::new())
 }
 
-fn analysis(code: Vec<Statement>, argument_patterns: Vec<Pattern>, import_paths: ImportPath) -> AnalysisStatementResult<Vec<HIRStatement<SearchPaths>>> {
+fn analysis(code: Vec<Statement>, argument_patterns: Vec<Pattern>, import_paths: ImportPath, generics_argument_names: &HashMap<&str, usize>) -> AnalysisStatementResult<Vec<HIRStatement<SearchPaths>>> {
     let mut result = Vec::new();
     let mut variables = BTreeMap::new();
     let mut imports: BTreeMap<String, HashSet<_>> = BTreeMap::new();
@@ -90,7 +120,7 @@ fn analysis(code: Vec<Statement>, argument_patterns: Vec<Pattern>, import_paths:
         variables.insert(argument_name, id).map_or(Ok(()), |old| Err(AnalysisStatementError::CollisionArgumentName(old, id)))?;
     }
     for stmt in deconstruct_argument.into_iter().chain(code) {
-        if push_statement(stmt, &mut result, &mut variables, &mut variable_sequence, &mut imports)? != StatementReachable::Reachable {
+        if push_statement(stmt, &mut result, &mut variables, &mut variable_sequence, &mut imports, generics_argument_names)? != StatementReachable::Reachable {
             break;
         }
     }
@@ -155,7 +185,7 @@ fn collect_import_path(path: ImportPath, mut base: Vec<String>) -> SearchPaths {
     }
 }
 
-fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>) -> AnalysisStatementResult<StatementReachable> {
+fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>, generics_argument_names: &HashMap<&str, usize>) -> AnalysisStatementResult<StatementReachable> {
     match statement {
         StatementItem::Import(path) => {
             for path in collect_import_path(path, Vec::new()).0 {
@@ -163,15 +193,15 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             }
             Ok(StatementReachable::Reachable)
         }
-        StatementItem::Expression(expression) => Ok(push_expression(expression, result, variables, variable_sequence, imports)?.0),
+        StatementItem::Expression(expression) => Ok(push_expression(expression, result, variables, variable_sequence, imports, generics_argument_names)?.0),
         StatementItem::LetBinding(LetBinding { pattern, type_hint, expression, .. }) => {
-            let (never, variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+            let (never, variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if never != StatementReachable::Reachable {
                 return Ok(never);
             }
             result.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
-                variable_type: type_hint.map_or_else(|| HIRType::try_from(&pattern), TryInto::try_into)?,
+                variable_type: apply_generics_type_argument(type_hint.map_or_else(|| HIRType::try_from(&pattern), TryInto::try_into)?, generics_argument_names),
                 expression: HIRExpression::AccessVariable(variable),
             });
             let current_variable = Variable::Unnamed(*variable_sequence);
@@ -181,7 +211,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
         }
         StatementItem::Return(expression) => {
             let return_item = if let Some(expression) = expression {
-                push_expression(expression, result, variables, variable_sequence, imports)?.1
+                push_expression(expression, result, variables, variable_sequence, imports, generics_argument_names)?.1
             } else {
                 push_expression(
                     Expression {
@@ -192,6 +222,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                     variables,
                     variable_sequence,
                     imports,
+                    generics_argument_names,
                 )?
                 .1
             };
@@ -211,7 +242,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
         }) => {
             assert!(last_expression.is_none(), "forのブロックは最後の式を持たないはず");
             let iter_position = iter.position.clone();
-            let (reachable, iterable) = push_expression(iter, result, variables, variable_sequence, imports)?;
+            let (reachable, iterable) = push_expression(iter, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok(reachable);
             }
@@ -273,7 +304,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             *variable_sequence += 3;
             push_deconstruct_pattern(pattern, iterator_variable, &mut body, &mut variables, variable_sequence, &mut imports)?;
             for stmt in statements {
-                let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports)?;
+                let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports, generics_argument_names)?;
                 match reachable {
                     StatementReachable::UnreachableByReturn => return Ok(reachable),
                     StatementReachable::UnreachableByBreak(None) => return Ok(StatementReachable::Reachable),
@@ -309,6 +340,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                 &mut variables,
                 variable_sequence,
                 &mut imports,
+                generics_argument_names,
             )?;
             body.push(HIRStatement::Binding {
                 variable_id: *variable_sequence,
@@ -326,7 +358,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             });
             *variable_sequence += 2;
             for stmt in statements {
-                let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports)?;
+                let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports, generics_argument_names)?;
                 match reachable {
                     StatementReachable::UnreachableByReturn => return Ok(reachable),
                     StatementReachable::UnreachableByBreak(None) => return Ok(StatementReachable::Reachable),
@@ -353,7 +385,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             let mut body = Vec::new();
             let mut variables = variables.clone();
             let mut imports = imports.clone();
-            let (_, condition) = push_expression(*expression, &mut body, &mut variables, variable_sequence, &mut imports)?;
+            let (_, condition) = push_expression(*expression, &mut body, &mut variables, variable_sequence, &mut imports, generics_argument_names)?;
             let condition_type = type_hint.map(HIRType::try_from).unwrap_or_else(|| HIRType::try_from(&pattern))?;
             body.push(HIRStatement::Binding {
                 variable_id: *variable_sequence + 2,
@@ -380,7 +412,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             *variable_sequence += 3;
             push_deconstruct_pattern(pattern, condition, &mut body, &mut variables, variable_sequence, &mut imports)?;
             for stmt in statements {
-                let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports)?;
+                let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports, generics_argument_names)?;
                 match reachable {
                     StatementReachable::UnreachableByReturn => return Ok(reachable),
                     StatementReachable::UnreachableByBreak(None) => return Ok(StatementReachable::Reachable),
@@ -400,7 +432,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
     }
 }
 
-fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>) -> AnalysisStatementResult<(StatementReachable, Variable<SearchPaths>)> {
+fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>, generics_argument_names: &HashMap<&str, usize>) -> AnalysisStatementResult<(StatementReachable, Variable<SearchPaths>)> {
     match expression {
         ExpressionItem::AccessVariable(Path { path, position }) => {
             let variable = if let [name] = AsRef::<[String]>::as_ref(&path) { variables.get(name).map(|id| Variable::Unnamed(*id)) } else { None };
@@ -427,7 +459,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             Ok((StatementReachable::Reachable, variable))
         }
         ExpressionItem::AccessTupleItem(expression, index) => {
-            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable));
             }
@@ -441,7 +473,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             Ok((StatementReachable::Reachable, variable))
         }
         ExpressionItem::AccessMember(expression, member) => {
-            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable));
             }
@@ -458,7 +490,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             let mut function_arguments = Vec::with_capacity(arguments.len() + 1);
             let function = if let Some(self_expression) = self_expression {
                 let self_expression = *self_expression;
-                let (reachable, self_variable) = push_expression(self_expression, result, variables, variable_sequence, imports)?;
+                let (reachable, self_variable) = push_expression(self_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, self_variable));
                 }
@@ -473,7 +505,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 Variable::Named(position, get_candidate_paths(path, imports))
             };
             for argument_expression in arguments {
-                let (reachable, argument_variable) = push_expression(argument_expression, result, variables, variable_sequence, imports)?;
+                let (reachable, argument_variable) = push_expression(argument_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, argument_variable));
                 }
@@ -489,12 +521,12 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             Ok((StatementReachable::Reachable, result_variable))
         }
         ExpressionItem::Indexer(base_expression, index_expression) => {
-            let (reachable, base_variable) = push_expression(*base_expression, result, variables, variable_sequence, imports)?;
+            let (reachable, base_variable) = push_expression(*base_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, base_variable));
             }
             let index_expression_position = index_expression.position.clone();
-            let (reachable, index_variable) = push_expression(*index_expression, result, variables, variable_sequence, imports)?;
+            let (reachable, index_variable) = push_expression(*index_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, index_variable));
             }
@@ -513,7 +545,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         ExpressionItem::ConstructTuple(expressions) => {
             let mut members = Vec::with_capacity(expressions.len());
             for expression in expressions {
-                let (reachable, variable) = push_expression(expression, result, variables, variable_sequence, imports)?;
+                let (reachable, variable) = push_expression(expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, variable));
                 }
@@ -531,7 +563,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         ExpressionItem::ConstructArray(expressions) => {
             let mut members = Vec::with_capacity(expressions.len());
             for expression in expressions {
-                let (reachable, variable) = push_expression(expression, result, variables, variable_sequence, imports)?;
+                let (reachable, variable) = push_expression(expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, variable));
                 }
@@ -552,7 +584,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 if members.contains_key(&name) {
                     return Err(AnalysisStatementError::DuplicatedMember(name));
                 }
-                let (reachable, variable) = push_expression(expression, result, variables, variable_sequence, imports)?;
+                let (reachable, variable) = push_expression(expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, variable));
                 }
@@ -571,7 +603,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             let mut variables = variables.clone();
             let mut imports = imports.clone();
             for statement in statements {
-                let reachable = push_statement(statement, result, &mut variables, variable_sequence, &mut imports)?;
+                let reachable = push_statement(statement, result, &mut variables, variable_sequence, &mut imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     result.push(HIRStatement::Binding {
                         variable_id: *variable_sequence,
@@ -583,7 +615,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 }
             }
             if let Some(last_expression) = last_expression {
-                push_expression(*last_expression, result, &mut variables, variable_sequence, &mut imports)
+                push_expression(*last_expression, result, &mut variables, variable_sequence, &mut imports, generics_argument_names)
             } else {
                 result.push(HIRStatement::Binding {
                     variable_id: *variable_sequence,
@@ -596,7 +628,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Neg(expression) => {
             let expression_position = expression.position.clone();
-            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable));
             }
@@ -614,7 +646,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Not(expression) => {
             let expression_position = expression.position.clone();
-            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+            let (reachable, variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable));
             }
@@ -632,11 +664,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Mul(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -654,11 +686,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Div(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -676,11 +708,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Rem(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -698,11 +730,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Add(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -720,11 +752,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Sub(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -742,11 +774,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::GreaterThan(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -764,11 +796,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::LessThan(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -786,11 +818,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::GreaterOrEqual(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -818,11 +850,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::LessOrEqual(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -850,11 +882,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Equals(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -872,11 +904,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::NotEquals(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -904,11 +936,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::And(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -926,11 +958,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Xor(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -948,11 +980,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         }
         ExpressionItem::Or(expression1, expression2) => {
             let expression_position = expression1.position.end..expression2.position.start;
-            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports)?;
+            let (reachable, variable1) = push_expression(*expression1, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable1));
             }
-            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports)?;
+            let (reachable, variable2) = push_expression(*expression2, result, variables, variable_sequence, imports, generics_argument_names)?;
             if reachable != StatementReachable::Reachable {
                 return Ok((reachable, variable2));
             }
@@ -968,12 +1000,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             *variable_sequence += 1;
             Ok((StatementReachable::Reachable, result_variable))
         }
-
         ExpressionItem::Assign(reference_expression, value_expression) => {
             let value_expression = *value_expression;
             match *reference_expression {
                 Expression { expression: ExpressionItem::AccessVariable(Path { position, path }), .. } => {
-                    let (reachable, value_variable) = push_expression(value_expression, result, variables, variable_sequence, imports)?;
+                    let (reachable, value_variable) = push_expression(value_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, value_variable));
                     }
@@ -991,11 +1022,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                     Ok((StatementReachable::Reachable, result_variable))
                 }
                 Expression { expression: ExpressionItem::AccessTupleItem(base, index), .. } => {
-                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports)?;
+                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, base));
                     }
-                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports)?;
+                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, value));
                     }
@@ -1009,11 +1040,11 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                     Ok((StatementReachable::Reachable, result_variable))
                 }
                 Expression { expression: ExpressionItem::AccessMember(base, member), .. } => {
-                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports)?;
+                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, base));
                     }
-                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports)?;
+                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, value));
                     }
@@ -1027,16 +1058,16 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                     Ok((StatementReachable::Reachable, result_variable))
                 }
                 Expression { expression: ExpressionItem::Indexer(base, index), .. } => {
-                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports)?;
+                    let (reachable, base) = push_expression(*base, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, base));
                     }
                     let index_position = index.position.clone();
-                    let (reachable, index) = push_expression(*index, result, variables, variable_sequence, imports)?;
+                    let (reachable, index) = push_expression(*index, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, index));
                     }
-                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports)?;
+                    let (reachable, value) = push_expression(value_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, value));
                     }
@@ -1057,16 +1088,16 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         ExpressionItem::Closure(_) => Err(AnalysisStatementError::UnImplementedFeature("ConstructClosure")),
         ExpressionItem::If(If { condition, then, other, .. }) => match *condition {
             Condition::BoolExpression(condition) => {
-                let (reachable, condition) = push_expression(condition, result, variables, variable_sequence, imports)?;
+                let (reachable, condition) = push_expression(condition, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, condition));
                 }
                 let mut then_statements = Vec::new();
-                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, variables, variable_sequence, imports)?;
+                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, variables, variable_sequence, imports, generics_argument_names)?;
                 let then = (then_statements, then_result);
                 let other = if let Some(other) = other {
                     let mut other_statements = Vec::new();
-                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, variables, variable_sequence, imports)?;
+                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, variables, variable_sequence, imports, generics_argument_names)?;
                     reachable.combine(other_reachable);
                     (other_statements, other_result)
                 } else {
@@ -1091,20 +1122,20 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 Ok((reachable, result))
             }
             Condition::LetBinding(LetBinding { pattern, type_hint, expression, .. }) => {
-                let (reachable, condition_variable) = push_expression(*expression, result, variables, variable_sequence, imports)?;
+                let (reachable, condition_variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
                     return Ok((reachable, condition_variable));
                 }
                 let condition_binding = *variable_sequence;
                 *variable_sequence += 1;
-                let pattern_type = type_hint.map_or_else(|| HIRType::try_from(&pattern), HIRType::try_from)?;
+                let pattern_type = apply_generics_type_argument(type_hint.map_or_else(|| HIRType::try_from(&pattern), HIRType::try_from)?, generics_argument_names);
                 let mut then_statements = Vec::new();
                 push_deconstruct_pattern(pattern, Variable::Unnamed(condition_binding), &mut then_statements, variables, variable_sequence, imports)?;
-                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, variables, variable_sequence, imports)?;
+                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, variables, variable_sequence, imports, generics_argument_names)?;
                 let then = (then_statements, then_result);
                 let other = if let Some(other) = other {
                     let mut other_statements = Vec::new();
-                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, variables, variable_sequence, imports)?;
+                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, variables, variable_sequence, imports, generics_argument_names)?;
                     reachable.combine(other_reachable);
                     (other_statements, other_result)
                 } else {
