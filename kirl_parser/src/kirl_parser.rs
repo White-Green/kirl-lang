@@ -167,12 +167,12 @@ pub struct Expression {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ExpressionItem {
-    AccessVariable(Path),
+    AccessVariable(Path, Vec<Type>),
     StringImmediate(String),
     NumberImmediate(Decimal128),
     AccessTupleItem(Box<Expression>, usize),
     AccessMember(Box<Expression>, String),
-    CallFunction(Option<Box<Expression>>, Option<Path>, Vec<Expression>),
+    CallFunction(FunctionReference, Vec<Expression>),
     Indexer(Box<Expression>, Box<Expression>),
     ConstructTuple(Vec<Expression>),
     ConstructArray(Vec<Expression>),
@@ -219,6 +219,18 @@ pub enum ExpressionItem {
 impl Default for ExpressionItem {
     fn default() -> Self {
         ExpressionItem::NumberImmediate(Default::default())
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum FunctionReference {
+    Dynamic(Box<Expression>),
+    Static { path: Path, generics_type_arguments: Vec<Type> },
+}
+
+impl Default for FunctionReference {
+    fn default() -> Self {
+        FunctionReference::Dynamic(Default::default())
     }
 }
 
@@ -300,6 +312,8 @@ pub enum Symbol {
     Statement((Range<CharacterPosition>, Statement)),
     StatementList((Range<CharacterPosition>, Vec<Statement>)),
     Block((Range<CharacterPosition>, Block)),
+    VariableReference((Range<CharacterPosition>, Path, Vec<Type>)),
+    CallFunctionArguments((Range<CharacterPosition>, Vec<Expression>)),
     Expression8((Range<CharacterPosition>, Expression)),
     Expression7((Range<CharacterPosition>, Expression)),
     Expression6((Range<CharacterPosition>, Expression)),
@@ -399,6 +413,8 @@ parser! {
             Statement = Statement(Default::default()),
             StatementList = StatementList(Default::default()),
             Block = Block(Default::default()),
+            VariableReference = VariableReference(Default::default()),
+            CallFunctionArguments = CallFunctionArguments(Default::default()),
             Expression8 = Expression8(Default::default()),
             Expression7 = Expression7(Default::default()),
             Expression6 = Expression6(Default::default()),
@@ -518,7 +534,7 @@ parser! {
             |"struct" [Identifier] "{" <StructDefinitionItems> "}": [Terminal(Token::Struct(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::StructDefinitionItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] => Ok(Symbol::StructDefinition((*start..*end, Struct { name: name.clone(), generics_arguments: Vec::new(), members: mem::take(items) })));
             |"struct" [Identifier] "::" "<" <GenericsTypeArguments> ">" "{" <StructDefinitionItems> "}": [Terminal(Token::Struct(Range { start, .. })), Terminal(Token::Identifier((_, name))), _, _, NonTerminal(Symbol::GenericsTypeArguments((_, types))), _, _, NonTerminal(Symbol::StructDefinitionItems((_, items))), Terminal(Token::WaveBracketClose(Range { end, .. }))] => Ok(Symbol::StructDefinition((*start..*end, Struct { name: name.clone(), generics_arguments: mem::take(types), members: mem::take(items) })));
         <ConstructStructItems>::=[Identifier] ":" <Expression>: [Terminal(Token::Identifier((Range { start, .. }, name))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] => Ok(Symbol::ConstructStructItems((*start..*end, vec![(name.clone(), mem::take(expression))])));
-            |[Identifier]: [Terminal(Token::Identifier((position, name)))] => Ok(Symbol::ConstructStructItems((position.clone(), vec![(name.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(Path { position: position.clone(), path: vec![name.clone()] }) })])));
+            |[Identifier]: [Terminal(Token::Identifier((position, name)))] => Ok(Symbol::ConstructStructItems((position.clone(), vec![(name.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(Path { position: position.clone(), path: vec![name.clone()] }, Vec::new()) })])));
             |<ConstructStructItems> "," [Identifier] ":" <Expression>: [NonTerminal(Symbol::ConstructStructItems((Range { start, .. }, items))), _, Terminal(Token::Identifier((_, name))), _, NonTerminal(Symbol::Expression((Range { end, .. }, expression)))] => Ok(Symbol::ConstructStructItems((*start..*end, {
                     items.push((name.clone(), mem::take(expression)));
                     mem::take(items)
@@ -526,7 +542,7 @@ parser! {
             |<ConstructStructItems> "," [Identifier]: [NonTerminal(Symbol::ConstructStructItems((Range { start, .. }, items))), _, Terminal(Token::Identifier((position, name)))] => Ok(Symbol::ConstructStructItems((*start..position.end, {
                     items.push((name.clone(), Expression {
                         position: position.clone(),
-                        expression: ExpressionItem::AccessVariable(Path { position: position.clone(), path: vec![name.clone()] }),
+                        expression: ExpressionItem::AccessVariable(Path { position: position.clone(), path: vec![name.clone()] }, Vec::new()),
                     }));
                     mem::take(items)
                 })));
@@ -568,20 +584,25 @@ parser! {
                     statements: Vec::new(),
                     last_expression: None,
                 })));
-        <Expression8>::=<FullPath>: [NonTerminal(Symbol::FullPath((position, path)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(mem::take(path)) })));
+        <VariableReference>::=<FullPath>: [NonTerminal(Symbol::FullPath((range, path)))] => Ok(Symbol::VariableReference((range.clone(), mem::take(path), Vec::new())));
+            |<FullPath> "::" "<" ">": [NonTerminal(Symbol::FullPath((range, path))), ..] => Ok(Symbol::VariableReference((range.clone(), mem::take(path), Vec::new())));
+            |<FullPath> "::" "<" <Type> ">": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::Type((_, ty))), Terminal(Token::GreaterThan(Range { end, .. }))] => Ok(Symbol::VariableReference((*start..*end, mem::take(path), vec![mem::take(ty)])));
+            |<FullPath> "::" "<" <Type> "," ">": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::Type((_, ty))), _, Terminal(Token::GreaterThan(Range { end, .. }))] => Ok(Symbol::VariableReference((*start..*end, mem::take(path), vec![mem::take(ty)])));
+            |<FullPath> "::" "<" <CommaSeparatedTypes> ">": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), Terminal(Token::GreaterThan(Range { end, .. }))] => Ok(Symbol::VariableReference((*start..*end, mem::take(path), mem::take(types))));
+            |<FullPath> "::" "<" <CommaSeparatedTypes> "," ">": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, _, NonTerminal(Symbol::CommaSeparatedTypes((_, types))), _, Terminal(Token::GreaterThan(Range { end, .. }))] => Ok(Symbol::VariableReference((*start..*end, mem::take(path), mem::take(types))));
+        <CallFunctionArguments>::="(" ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::CallFunctionArguments((*start..*end, Vec::new())));
+            |"(" <Expression> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, expression))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::CallFunctionArguments((*start..*end, vec![mem::take(expression)])));
+            |"(" <Expression> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::Expression((_, expression))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::CallFunctionArguments((*start..*end, vec![mem::take(expression)])));
+            |"(" <CommaSeparatedExpressions> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::CallFunctionArguments((*start..*end, mem::take(expressions))));
+            |"(" <CommaSeparatedExpressions> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::CallFunctionArguments((*start..*end, mem::take(expressions))));
+        <Expression8>::=<VariableReference>: [NonTerminal(Symbol::VariableReference((position, path, types)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::AccessVariable(mem::take(path), mem::take(types)) })));
             |[StringImmediate]: [Terminal(Token::StringImmediate((position, value)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::StringImmediate(value.clone()) })));
             |[NumberImmediate]: [Terminal(Token::NumberImmediate((position, value)))] => Ok(Symbol::Expression8((position.clone(), Expression { position: position.clone(), expression: ExpressionItem::NumberImmediate(*value) })));
-            |<Expression8> "." <FullPath> "(" ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(mem::take(path)), Vec::new()) })));
-            |<FullPath> "(" ")": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(None, Some(mem::take(path)), Vec::new()) })));
-            |<Expression8> "." "(" ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), None, Vec::new()) })));
-            |<Expression8> "." <FullPath> "(" <Expression> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(mem::take(path)), vec![mem::take(argument)]) })));
-            |<FullPath> "(" <Expression> ")": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(None, Some(mem::take(path)), vec![mem::take(argument)]) })));
-            |<Expression8> "." "(" <Expression> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, _, NonTerminal(Symbol::Expression((_, argument))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), None, vec![mem::take(argument)]) })));
+            |<VariableReference> <CallFunctionArguments>: [NonTerminal(Symbol::VariableReference((Range { start, .. }, path, types))), NonTerminal(Symbol::CallFunctionArguments((Range { end, .. }, expressions)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(FunctionReference::Static { path: mem::take(path), generics_type_arguments: mem::take(types)}, mem::take(expressions)) })));
+            |<Expression8> "." <VariableReference> <CallFunctionArguments>: [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::VariableReference((_, path, types))), NonTerminal(Symbol::CallFunctionArguments((Range { end, .. }, expressions)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(FunctionReference::Static { path: mem::take(path), generics_type_arguments: mem::take(types)}, [mem::take(expression)].into_iter().chain(mem::take(expressions)).collect()) })));
+            |<Expression8> "." <CallFunctionArguments>: [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::CallFunctionArguments((Range { end, .. }, expressions)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(FunctionReference::Dynamic(Box::new(mem::take(expression))), mem::take(expressions)) })));
             |<Expression8> "." [Identifier]: [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::Identifier((Range { end, .. }, member)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::AccessMember(Box::new(mem::take(expression)), member.clone()) })));
             |<Expression8> "." [TupleIndex]: [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, Terminal(Token::TupleIndex((Range { end, .. }, index)))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::AccessTupleItem(Box::new(mem::take(expression)), *index) })));
-            |<Expression8> "." <FullPath> "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::FullPath((_, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), Some(mem::take(path)), mem::take(arguments)) })));
-            |<FullPath> "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::FullPath((Range { start, .. }, path))), _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(None, Some(mem::take(path)), mem::take(arguments)) })));
-            |<Expression8> "." "(" <CommaSeparatedExpressions> ")": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, _, NonTerminal(Symbol::CommaSeparatedExpressions((_, arguments))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::CallFunction(Some(Box::new(mem::take(expression))), None, mem::take(arguments)) })));
             |<Expression8> "[" <Expression> "]": [NonTerminal(Symbol::Expression8((Range { start, .. }, expression))), _, NonTerminal(Symbol::Expression((_, index))), Terminal(Token::SquareBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::Indexer(Box::new(mem::take(expression)), Box::new(mem::take(index))) })));
             |"(" <CommaSeparatedExpressions> ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(mem::take(expressions)) })));
             |"(" <CommaSeparatedExpressions> "," ")": [Terminal(Token::RoundBracketOpen(Range { start, .. })), NonTerminal(Symbol::CommaSeparatedExpressions((_, expressions))), _, Terminal(Token::RoundBracketClose(Range { end, .. }))] => Ok(Symbol::Expression8((*start..*end, Expression { position: *start..*end, expression: ExpressionItem::ConstructTuple(mem::take(expressions)) })));

@@ -3,7 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use kirl_parser::kirl_parser::{Block, Condition, ConstructStruct, Expression, ExpressionItem, ForStatement, Function, If, ImportPath, LetBinding, Path, Pattern, Statement, StatementItem, WhileStatement};
+use kirl_parser::kirl_parser::{Block, Condition, ConstructStruct, Expression, ExpressionItem, ForStatement, Function, FunctionReference, If, ImportPath, LetBinding, Path, Pattern, Statement, StatementItem, WhileStatement};
 
 use crate::{HIRExpression, HIRStatement, HIRType, HIRTypeConvertError, Immediate, ReferenceAccess, StatementReachable, Variable, WithImport};
 
@@ -113,7 +113,7 @@ fn analysis(code: Vec<Statement>, argument_patterns: Vec<Pattern>, import_paths:
                 type_hint: None,
                 expression: Box::new(Expression {
                     position: Default::default(),
-                    expression: ExpressionItem::AccessVariable(Path { position: Default::default(), path: vec![argument_name.clone()] }),
+                    expression: ExpressionItem::AccessVariable(Path { position: Default::default(), path: vec![argument_name.clone()] }, Vec::new()),
                 }),
             }),
         });
@@ -434,7 +434,8 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
 
 fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>, generics_argument_names: &HashMap<&str, usize>) -> AnalysisStatementResult<(StatementReachable, Variable<SearchPaths>)> {
     match expression {
-        ExpressionItem::AccessVariable(Path { path, position }) => {
+        ExpressionItem::AccessVariable(Path { path, position }, _) => {
+            //TODO:ジェネリクス
             let variable = if let [name] = AsRef::<[String]>::as_ref(&path) { variables.get(name).map(|id| Variable::Unnamed(*id)) } else { None };
             Ok((StatementReachable::Reachable, variable.unwrap_or_else(|| Variable::Named(position, get_candidate_paths(path, imports)))))
         }
@@ -486,24 +487,19 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             *variable_sequence += 1;
             Ok((StatementReachable::Reachable, variable))
         }
-        ExpressionItem::CallFunction(self_expression, function_name, arguments) => {
-            let mut function_arguments = Vec::with_capacity(arguments.len() + 1);
-            let function = if let Some(self_expression) = self_expression {
-                let self_expression = *self_expression;
-                let (reachable, self_variable) = push_expression(self_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
-                if reachable != StatementReachable::Reachable {
-                    return Ok((reachable, self_variable));
+        ExpressionItem::CallFunction(function_reference, arguments) => {
+            //TODO:ジェネリクス
+            let function = match function_reference {
+                FunctionReference::Dynamic(expression) => {
+                    let (reachable, function_variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
+                    if reachable != StatementReachable::Reachable {
+                        return Ok((reachable, function_variable));
+                    }
+                    function_variable
                 }
-                if let Some(Path { position, path }) = function_name {
-                    function_arguments.push(self_variable);
-                    Variable::Named(position, get_candidate_paths(path, imports))
-                } else {
-                    self_variable
-                }
-            } else {
-                let Path { position, path } = function_name.unwrap();
-                Variable::Named(position, get_candidate_paths(path, imports))
+                FunctionReference::Static { path, .. } => Variable::Named(path.position, get_candidate_paths(path.path, imports)),
             };
+            let mut function_arguments = Vec::with_capacity(arguments.len());
             for argument_expression in arguments {
                 let (reachable, argument_variable) = push_expression(argument_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                 if reachable != StatementReachable::Reachable {
@@ -1003,7 +999,9 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
         ExpressionItem::Assign(reference_expression, value_expression) => {
             let value_expression = *value_expression;
             match *reference_expression {
-                Expression { expression: ExpressionItem::AccessVariable(Path { position, path }), .. } => {
+                Expression {
+                    expression: ExpressionItem::AccessVariable(Path { position, path }, _), ..
+                } => {
                     let (reachable, value_variable) = push_expression(value_expression, result, variables, variable_sequence, imports, generics_argument_names)?;
                     if reachable != StatementReachable::Reachable {
                         return Ok((reachable, value_variable));

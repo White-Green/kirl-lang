@@ -8,13 +8,13 @@ edition = "2021"
 
 [dependencies]
 dec = "0.4.5"
-tokenizer = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "3fd97653fc2aca8376240f7780a143a42d4389ed" }
+tokenizer = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "9b833ae43d4d6c032d25de48c6077ed16e0c5b85" }
 #tokenizer = { path = "../../Yet-Another-Rust-Parser/tokenizer" }
-tokenizer_generator = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "3fd97653fc2aca8376240f7780a143a42d4389ed" }
+tokenizer_generator = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "9b833ae43d4d6c032d25de48c6077ed16e0c5b85" }
 #tokenizer_generator = { path = "../../Yet-Another-Rust-Parser/tokenizer_generator" }
-parser = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "3fd97653fc2aca8376240f7780a143a42d4389ed" }
+parser = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "9b833ae43d4d6c032d25de48c6077ed16e0c5b85" }
 #parser = { path = "../../Yet-Another-Rust-Parser/parser" }
-parser_generator = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "3fd97653fc2aca8376240f7780a143a42d4389ed" }
+parser_generator = { git = "https://github.com/White-Green/Yet-Another-Rust-Parser", rev = "9b833ae43d4d6c032d25de48c6077ed16e0c5b85" }
 #parser_generator = { path = "../../Yet-Another-Rust-Parser/parser_generator" }
 once_cell = "1.8.0"
 arrayvec = "0.7.1"

@@ -61,6 +61,38 @@ struct MyStruct::<T> {
     value_b: string
 }
 
+std::test::new();
+std::test::new(a);
+std::test::new(a,);
+std::test::new(a, b);
+std::test::new(a, b,);
+
+std::test::new();
+std::test::new::<>();
+std::test::new::<Number>();
+std::test::new::<Number,>();
+std::test::new::<Number, String>();
+std::test::new::<Number, String,>();
+
+a.std::test::new();
+a.std::test::new(a);
+a.std::test::new(a,);
+a.std::test::new(a, b);
+a.std::test::new(a, b,);
+
+a.std::test::new();
+a.std::test::new::<>();
+a.std::test::new::<Number>();
+a.std::test::new::<Number,>();
+a.std::test::new::<Number, String>();
+a.std::test::new::<Number, String,>();
+
+a.();
+a.(a);
+a.(a,);
+a.(a, b);
+a.(a, b,);
+
 "#;
     let parse = |code: &str| {
         code.chars()
@@ -141,17 +173,20 @@ struct MyStruct::<T> {
                                             expression: ExpressionItem::GreaterThan(
                                                 Expression {
                                                     position: CharacterPosition::new(1, 7)..CharacterPosition::new(1, 14),
-                                                    expression: ExpressionItem::AccessVariable(Path {
-                                                        position: CharacterPosition::new(1, 7)..CharacterPosition::new(1, 14),
-                                                        path: vec!["value_a".to_owned()],
-                                                    }),
+                                                    expression: ExpressionItem::AccessVariable(
+                                                        Path {
+                                                            position: CharacterPosition::new(1, 7)..CharacterPosition::new(1, 14),
+                                                            path: vec!["value_a".to_owned()],
+                                                        },
+                                                        Vec::new()
+                                                    ),
                                                 }
                                                 .into(),
                                                 Expression {
                                                     position: CharacterPosition::new(1, 17)..CharacterPosition::new(1, 20),
                                                     expression: ExpressionItem::NumberImmediate(Decimal128::from(100)),
                                                 }
-                                                .into()
+                                                .into(),
                                             ),
                                         })
                                         .into(),
@@ -170,10 +205,13 @@ struct MyStruct::<T> {
                                                                     "value_a".to_owned(),
                                                                     Expression {
                                                                         position: CharacterPosition::new(2, 10)..CharacterPosition::new(2, 17),
-                                                                        expression: ExpressionItem::AccessVariable(Path {
-                                                                            position: CharacterPosition::new(2, 10)..CharacterPosition::new(2, 17),
-                                                                            path: vec!["value_a".to_owned()],
-                                                                        },),
+                                                                        expression: ExpressionItem::AccessVariable(
+                                                                            Path {
+                                                                                position: CharacterPosition::new(2, 10)..CharacterPosition::new(2, 17),
+                                                                                path: vec!["value_a".to_owned()],
+                                                                            },
+                                                                            Vec::new()
+                                                                        ),
                                                                     },
                                                                 ),
                                                                 (
@@ -211,17 +249,20 @@ struct MyStruct::<T> {
                                                                 expression: ExpressionItem::Mul(
                                                                     Expression {
                                                                         position: CharacterPosition::new(4, 27)..CharacterPosition::new(4, 34),
-                                                                        expression: ExpressionItem::AccessVariable(Path {
-                                                                            position: CharacterPosition::new(4, 27)..CharacterPosition::new(4, 34),
-                                                                            path: vec!["value_a".to_owned(),],
-                                                                        }),
+                                                                        expression: ExpressionItem::AccessVariable(
+                                                                            Path {
+                                                                                position: CharacterPosition::new(4, 27)..CharacterPosition::new(4, 34),
+                                                                                path: vec!["value_a".to_owned()],
+                                                                            },
+                                                                            Vec::new()
+                                                                        ),
                                                                     }
                                                                     .into(),
                                                                     Expression {
                                                                         position: CharacterPosition::new(4, 37)..CharacterPosition::new(4, 38),
                                                                         expression: ExpressionItem::NumberImmediate(Decimal128::from(2)),
                                                                     }
-                                                                    .into()
+                                                                    .into(),
                                                                 ),
                                                             }),
                                                         }),
@@ -236,10 +277,13 @@ struct MyStruct::<T> {
                                                                         "value_a".to_owned(),
                                                                         Expression {
                                                                             position: CharacterPosition::new(5, 19)..CharacterPosition::new(5, 26),
-                                                                            expression: ExpressionItem::AccessVariable(Path {
-                                                                                position: CharacterPosition::new(5, 19)..CharacterPosition::new(5, 26),
-                                                                                path: vec!["value_c".to_owned(),],
-                                                                            }),
+                                                                            expression: ExpressionItem::AccessVariable(
+                                                                                Path {
+                                                                                    position: CharacterPosition::new(5, 19)..CharacterPosition::new(5, 26),
+                                                                                    path: vec!["value_c".to_owned()],
+                                                                                },
+                                                                                Vec::new()
+                                                                            ),
                                                                         },
                                                                     ),
                                                                     (
