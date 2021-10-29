@@ -105,21 +105,33 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             }
                         },
                         HIRExpression::CallFunction { function, arguments: actual_arguments } => {
-                            let (position, ResolvedItems(paths, function)) = match function {
-                                Variable::Named(position, _, candidates) => (position.clone(), candidates),
+                            let (position, generics_arguments, ResolvedItems(paths, function)) = match function {
+                                Variable::Named(position, generics_arguments, candidates) => (position.clone(), generics_arguments.as_slice(), candidates),
                                 Variable::Unnamed(_) => {
                                     return Err(DecisionTypeError::UnImplementedFeature("Call function referenced by variable"));
                                 }
                             };
-                            function.retain(|(_, _, ty)| match ty {
-                                HIRType::Function { arguments: formal_arguments, .. } => {
-                                    formal_arguments.len() == actual_arguments.len()
-                                        && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
-                                            Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
-                                            Variable::Unnamed(id) => types[*id].is_a(formal),
-                                        })
-                                }
-                                _ => false,
+                            take_mut::take(function, |function| {
+                                function.into_iter().filter_map(|(path, id, ty)| {
+                                    let ty = match ty {
+                                        ty @ HIRType::Function { .. } => ty,
+                                        _ => return None,
+                                    };
+                                    let ty = ty.apply_generics_type_argument(generics_arguments)?;
+                                    match &ty {
+                                        HIRType::Function { arguments: formal_arguments, .. } => {
+                                            if !(formal_arguments.len() == actual_arguments.len()
+                                                && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
+                                                Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
+                                                Variable::Unnamed(id) => types[*id].is_a(formal),
+                                            })) {
+                                                return None;
+                                            }
+                                        }
+                                        _ => unreachable!()
+                                    }
+                                    Some((path, id, ty))
+                                }).collect()
                             });
                             if function.len() == 1 {
                                 let (_, _, function_type) = function.last().unwrap();
@@ -339,7 +351,6 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             let mut result_type = HIRType::Or(vec![then_type, other_type]);
                             result_type.normalize();
                             (result_type, if unreachable { Reachable::Unreachable } else { Reachable::Reachable })
-                            // return Err(DecisionTypeError::UnImplementedFeature("type checking for if-var expression"));
                         }
                         HIRExpression::Loop(inner) => {
                             decision_type_inner(inner, types, return_type)?;

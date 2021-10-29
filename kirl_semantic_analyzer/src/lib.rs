@@ -222,12 +222,63 @@ impl TryFrom<&Pattern> for HIRType {
 }
 
 impl HIRType {
+    pub fn apply_generics_type_argument(&self, type_arguments: &[HIRType]) -> Option<HIRType> {
+        match self {
+            HIRType::Infer => HIRType::Infer,
+            HIRType::Unreachable => HIRType::Unreachable,
+            HIRType::GenericsTypeArgument(i) => type_arguments.get(*i)?.clone(),
+            HIRType::Named { path, generics_arguments } => HIRType::Named {
+                path: path.clone(),
+                generics_arguments: {
+                    let mut types = Vec::with_capacity(generics_arguments.len());
+                    for ty in generics_arguments {
+                        types.push(ty.apply_generics_type_argument(type_arguments)?);
+                    }
+                    types
+                },
+            },
+            HIRType::Tuple(items) => HIRType::Tuple({
+                let mut types = Vec::with_capacity(items.len());
+                for ty in items {
+                    types.push(ty.apply_generics_type_argument(type_arguments)?);
+                }
+                types
+            }),
+            HIRType::Array(item) => HIRType::Array(Box::new(item.apply_generics_type_argument(type_arguments)?)),
+            HIRType::Function { arguments, result } => HIRType::Function {
+                arguments: {
+                    let mut types = Vec::with_capacity(arguments.len());
+                    for ty in arguments {
+                        types.push(ty.apply_generics_type_argument(type_arguments)?);
+                    }
+                    types
+                },
+                result: Box::new(result.apply_generics_type_argument(type_arguments)?),
+            },
+            HIRType::AnonymousStruct(members) => HIRType::AnonymousStruct({
+                let mut result = BTreeMap::new();
+                for (key, ty) in members {
+                    result.insert(key.clone(), ty.apply_generics_type_argument(type_arguments)?);
+                }
+                result
+            }),
+            HIRType::Or(items) => HIRType::Or({
+                let mut types = Vec::with_capacity(items.len());
+                for ty in items {
+                    types.push(ty.apply_generics_type_argument(type_arguments)?);
+                }
+                types
+            })
+        }.into()
+    }
+
     pub fn is_a(&self, rhs: &Self) -> bool {
         match (self, rhs) {
             (HIRType::Infer, _) => true,
             (_, HIRType::Infer) => true,
             (HIRType::Unreachable, _) => true,
             (_, HIRType::Unreachable) => false,
+            (HIRType::GenericsTypeArgument(i), HIRType::GenericsTypeArgument(j)) => j == i,
             (HIRType::Named { path: path1, generics_arguments: arg1 }, HIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.len() >= items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| ty1.is_a(ty2)),
             (HIRType::Array(t1), HIRType::Array(t2)) => t1.is_a(t2),
@@ -533,8 +584,8 @@ fn get_ordinal(index: usize) -> &'static str {
 }
 
 impl<T> ToString for HIRExpression<T>
-where
-    Variable<T>: ToString,
+    where
+        Variable<T>: ToString,
 {
     fn to_string(&self) -> String {
         match self {
@@ -603,8 +654,8 @@ where
 }
 
 impl<T> ToString for HIRStatement<T>
-where
-    Variable<T>: ToString,
+    where
+        Variable<T>: ToString,
 {
     fn to_string(&self) -> String {
         match self {
@@ -634,8 +685,8 @@ where
 }
 
 pub fn statements_to_string<T>(statements: &[HIRStatement<T>]) -> String
-where
-    HIRStatement<T>: ToString,
+    where
+        HIRStatement<T>: ToString,
 {
     statements.iter().map(ToString::to_string).reduce(|a, b| format!("{}\n{}", a, b)).unwrap_or_default()
 }
@@ -1317,18 +1368,18 @@ mod tests {
             arguments: vec![Tuple(vec![])],
             result: Box::new(Tuple(vec![Tuple(vec![])])),
         }
-        .is_a(&Function {
-            arguments: vec![Tuple(vec![Tuple(vec![])])],
-            result: Box::new(Tuple(vec![])),
-        }));
+            .is_a(&Function {
+                arguments: vec![Tuple(vec![Tuple(vec![])])],
+                result: Box::new(Tuple(vec![])),
+            }));
         assert!(!Function {
             arguments: vec![Tuple(vec![]), Tuple(vec![])],
             result: Box::new(Tuple(vec![Tuple(vec![])])),
         }
-        .is_a(&Function {
-            arguments: vec![Tuple(vec![Tuple(vec![])])],
-            result: Box::new(Tuple(vec![])),
-        }));
+            .is_a(&Function {
+                arguments: vec![Tuple(vec![Tuple(vec![])])],
+                result: Box::new(Tuple(vec![])),
+            }));
 
         assert!(AnonymousStruct(BTreeMap::from([("a".to_string(), Tuple(vec![Tuple(vec![])])), ("b".to_string(), Tuple(vec![]))])).is_a(&AnonymousStruct(BTreeMap::from([("a".to_string(), Tuple(vec![]))]))));
         assert!(!AnonymousStruct(BTreeMap::from([("a".to_string(), Tuple(vec![]))])).is_a(&AnonymousStruct(BTreeMap::from([("a".to_string(), Tuple(vec![Tuple(vec![])])), ("b".to_string(), Tuple(vec![]))]))));
