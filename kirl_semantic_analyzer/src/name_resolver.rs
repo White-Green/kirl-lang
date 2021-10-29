@@ -146,9 +146,9 @@ impl Resolvable for Variable<SearchPaths> {
     type ResolveResult = Variable<ResolvedItems>;
     fn resolve(self, resolver: &mut impl KirlNameResolver) -> Self::ResolveResult {
         match self {
-            Variable::Named(range, paths) => {
+            Variable::Named(range, types, paths) => {
                 let reference = ResolvedItems(paths.clone(), paths.0.into_iter().flat_map(|path| [path.clone()].into_iter().cycle().zip(resolver.resolve(&path)).map(|(path, (id, ty))| (path, id, ty))).collect());
-                Variable::Named(range, reference)
+                Variable::Named(range, types, reference)
             }
             Variable::Unnamed(id) => Variable::Unnamed(id),
         }
@@ -156,7 +156,7 @@ impl Resolvable for Variable<SearchPaths> {
 
     fn all_reference(&self) -> Vec<&[String]> {
         match self {
-            Variable::Named(_, SearchPaths(paths)) => paths.iter().map(Vec::as_slice).collect(),
+            Variable::Named(_, _, SearchPaths(paths)) => paths.iter().map(Vec::as_slice).collect(),
             Variable::Unnamed(_) => Vec::new(),
         }
     }

@@ -265,7 +265,7 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
         fn convert(statement: HIRStatement<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>, sequence: &mut usize, loop_labels: &mut Vec<String>) -> Result<(), LIRStatementListConvertError> {
             fn push_variable(variable: Variable<(Uuid, HIRType)>, result: &mut Vec<LIRStatement>) {
                 match variable {
-                    Variable::Named(_, (id, _)) => result.push(LIRInstruction::LoadNamedValue(id).into()),
+                    Variable::Named(_, _, (id, _)) => result.push(LIRInstruction::LoadNamedValue(id).into()),
                     Variable::Unnamed(id) => result.push(LIRInstruction::Load(id).into()),
                 }
             }
@@ -278,7 +278,7 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                         },
                         HIRExpression::CallFunction { function, arguments } => {
                             let function = match function {
-                                Variable::Named(_, (id, _)) => id,
+                                Variable::Named(_, _, (id, _)) => id,
                                 Variable::Unnamed(_) => todo!(),
                             };
                             for variable in arguments.into_iter().rev() {
@@ -355,7 +355,7 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                                 ReferenceAccess::Variable(dest) => {
                                     push_variable(value, result);
                                     match dest {
-                                        Variable::Named(_, _) => todo!(),
+                                        Variable::Named(_, _, _) => todo!(),
                                         Variable::Unnamed(dest) => result.push(LIRInstruction::Store(dest).into()),
                                     }
                                 }

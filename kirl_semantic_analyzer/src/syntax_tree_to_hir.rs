@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 
 use kirl_parser::kirl_parser::{Block, Condition, ConstructStruct, Expression, ExpressionItem, ForStatement, Function, FunctionReference, If, ImportPath, LetBinding, Path, Pattern, Statement, StatementItem, WhileStatement};
 
-use crate::{HIRExpression, HIRStatement, HIRType, HIRTypeConvertError, Immediate, ReferenceAccess, StatementReachable, Variable, WithImport};
+use crate::{HIRExpression, HIRStatement, HIRType, HIRTypeConvertError, Immediate, ReferenceAccess, StatementReachable, TryMapCollect, Variable, WithImport};
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct SearchPaths(pub(crate) Vec<Vec<String>>);
@@ -250,7 +250,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(iter_position.clone(), get_candidate_paths(vec!["_iterator".to_string()], imports)),
+                    function: Variable::Named(iter_position.clone(), Vec::new(), get_candidate_paths(vec!["_iterator".to_string()], imports)),
                     arguments: vec![iterable],
                 },
             });
@@ -263,7 +263,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Or(vec![HIRType::Tuple(Vec::new()), HIRType::AnonymousStruct([("value".to_string(), HIRType::Infer)].into_iter().collect())]),
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(iter_position, get_candidate_paths(vec!["_next".to_string()], &imports)),
+                    function: Variable::Named(iter_position, Vec::new(), get_candidate_paths(vec!["_next".to_string()], &imports)),
                     arguments: vec![iterator],
                 },
             });
@@ -434,10 +434,19 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
 
 fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>, generics_argument_names: &HashMap<&str, usize>) -> AnalysisStatementResult<(StatementReachable, Variable<SearchPaths>)> {
     match expression {
-        ExpressionItem::AccessVariable(Path { path, position }, _) => {
-            //TODO:ジェネリクス
-            let variable = if let [name] = AsRef::<[String]>::as_ref(&path) { variables.get(name).map(|id| Variable::Unnamed(*id)) } else { None };
-            Ok((StatementReachable::Reachable, variable.unwrap_or_else(|| Variable::Named(position, get_candidate_paths(path, imports)))))
+        ExpressionItem::AccessVariable(Path { path, position }, types) => {
+            assert!(!path.is_empty());
+            let variable = if types.is_empty() {
+                if let [name] = AsRef::<[String]>::as_ref(&path) {
+                    variables.get(name).map(|id| Variable::Unnamed(*id))
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let types = types.into_iter().try_map_collect(HIRType::try_from)?;
+            Ok((StatementReachable::Reachable, variable.unwrap_or_else(|| Variable::Named(position, types, get_candidate_paths(path, imports)))))
         }
         ExpressionItem::StringImmediate(value) => {
             result.push(HIRStatement::Binding {
@@ -488,7 +497,6 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
             Ok((StatementReachable::Reachable, variable))
         }
         ExpressionItem::CallFunction(function_reference, arguments) => {
-            //TODO:ジェネリクス
             let function = match function_reference {
                 FunctionReference::Dynamic(expression) => {
                     let (reachable, function_variable) = push_expression(*expression, result, variables, variable_sequence, imports, generics_argument_names)?;
@@ -497,7 +505,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                     }
                     function_variable
                 }
-                FunctionReference::Static { path, .. } => Variable::Named(path.position, get_candidate_paths(path.path, imports)),
+                FunctionReference::Static { path, generics_type_arguments } => Variable::Named(path.position, generics_type_arguments.into_iter().try_map_collect(HIRType::try_from)?, get_candidate_paths(path.path, imports)),
             };
             let mut function_arguments = Vec::with_capacity(arguments.len());
             for argument_expression in arguments {
@@ -530,7 +538,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(index_expression_position, get_candidate_paths(vec!["_get_item".to_string()], imports)),
+                    function: Variable::Named(index_expression_position, Vec::new(), get_candidate_paths(vec!["_get_item".to_string()], imports)),
                     arguments: vec![base_variable, index_variable],
                 },
             });
@@ -632,7 +640,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_neg".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_neg".to_string()], imports)),
                     arguments: vec![variable],
                 },
             });
@@ -650,7 +658,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_not".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_not".to_string()], imports)),
                     arguments: vec![variable],
                 },
             });
@@ -672,7 +680,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_mul".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_mul".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -694,7 +702,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_div".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_div".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -716,7 +724,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_rem".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_rem".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -738,7 +746,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_add".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_add".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -760,7 +768,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_sub".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_sub".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -782,7 +790,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_gt".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_gt".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -804,7 +812,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_gt".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_gt".to_string()], imports)),
                     arguments: vec![variable2, variable1],
                 },
             });
@@ -826,7 +834,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position.clone(), get_candidate_paths(vec!["_gt".to_string()], imports)),
+                    function: Variable::Named(expression_position.clone(), Vec::new(), get_candidate_paths(vec!["_gt".to_string()], imports)),
                     arguments: vec![variable2, variable1],
                 },
             });
@@ -836,7 +844,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_not".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_not".to_string()], imports)),
                     arguments: vec![tmp_variable],
                 },
             });
@@ -858,7 +866,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position.clone(), get_candidate_paths(vec!["_gt".to_string()], imports)),
+                    function: Variable::Named(expression_position.clone(), Vec::new(), get_candidate_paths(vec!["_gt".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -868,7 +876,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_not".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_not".to_string()], imports)),
                     arguments: vec![tmp_variable],
                 },
             });
@@ -890,7 +898,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_eq".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_eq".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -912,7 +920,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position.clone(), get_candidate_paths(vec!["_eq".to_string()], imports)),
+                    function: Variable::Named(expression_position.clone(), Vec::new(), get_candidate_paths(vec!["_eq".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -922,7 +930,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_not".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_not".to_string()], imports)),
                     arguments: vec![tmp_variable],
                 },
             });
@@ -944,7 +952,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_and".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_and".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -966,7 +974,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_xor".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_xor".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -988,7 +996,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 variable_id: *variable_sequence,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::CallFunction {
-                    function: Variable::Named(expression_position, get_candidate_paths(vec!["_or".to_string()], imports)),
+                    function: Variable::Named(expression_position, Vec::new(), get_candidate_paths(vec!["_or".to_string()], imports)),
                     arguments: vec![variable1, variable2],
                 },
             });
@@ -1011,7 +1019,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                         variable_id: *variable_sequence,
                         variable_type: HIRType::Infer,
                         expression: HIRExpression::Assign {
-                            variable: ReferenceAccess::Variable(variable_reference.copied().map(Variable::Unnamed).unwrap_or_else(|| Variable::Named(position, get_candidate_paths(path, imports)))),
+                            variable: ReferenceAccess::Variable(variable_reference.copied().map(Variable::Unnamed).unwrap_or_else(|| Variable::Named(position, Vec::new(), get_candidate_paths(path, imports)))),
                             value: value_variable,
                         },
                     });
@@ -1073,7 +1081,7 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                         variable_id: *variable_sequence,
                         variable_type: HIRType::Infer,
                         expression: HIRExpression::CallFunction {
-                            function: Variable::Named(index_position, get_candidate_paths(vec!["_set_item".to_string()], imports)),
+                            function: Variable::Named(index_position, Vec::new(), get_candidate_paths(vec!["_set_item".to_string()], imports)),
                             arguments: vec![base, index, value.clone()],
                         },
                     });

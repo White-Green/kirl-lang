@@ -437,15 +437,15 @@ pub enum Immediate {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Variable<Reference> {
-    Named(Range<CharacterPosition>, Reference),
+    Named(Range<CharacterPosition>, Vec<HIRType>, Reference),
     Unnamed(usize),
 }
 
 impl ToString for Variable<SearchPaths> {
     fn to_string(&self) -> String {
         match self {
-            Variable::Named(_, SearchPaths(path)) if path.len() == 1 => path[0].join("::"),
-            Variable::Named(_, SearchPaths(paths)) => format!("$either({})", paths.iter().map(|path| path.join("::")).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
+            Variable::Named(_, _, SearchPaths(path)) if path.len() == 1 => path[0].join("::"),
+            Variable::Named(_, _, SearchPaths(paths)) => format!("$either({})", paths.iter().map(|path| path.join("::")).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
             Variable::Unnamed(id) => format!("${}", id),
         }
     }
@@ -454,8 +454,8 @@ impl ToString for Variable<SearchPaths> {
 impl ToString for Variable<ResolvedItems> {
     fn to_string(&self) -> String {
         match self {
-            Variable::Named(_, ResolvedItems(_, candidate)) if candidate.len() == 1 => format!("{}: {}", candidate[0].1, candidate[0].1.to_string()),
-            Variable::Named(_, ResolvedItems(_, candidates)) => format!("$either({})", candidates.iter().map(|(_, id, ty)| format!("{}: {}", id, ty.to_string())).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
+            Variable::Named(_, _, ResolvedItems(_, candidate)) if candidate.len() == 1 => format!("{}: {}", candidate[0].1, candidate[0].1.to_string()),
+            Variable::Named(_, _, ResolvedItems(_, candidates)) => format!("$either({})", candidates.iter().map(|(_, id, ty)| format!("{}: {}", id, ty.to_string())).reduce(|a, b| format!("{}, {}", a, b)).unwrap_or_default()),
             Variable::Unnamed(id) => format!("${}", id),
         }
     }
@@ -464,7 +464,7 @@ impl ToString for Variable<ResolvedItems> {
 impl ToString for Variable<(Uuid, HIRType)> {
     fn to_string(&self) -> String {
         match self {
-            Variable::Named(_, (id, ty)) => format!("{}: {}", id, ty.to_string()),
+            Variable::Named(_, _, (id, ty)) => format!("{}: {}", id, ty.to_string()),
             Variable::Unnamed(id) => format!("${}", id),
         }
     }
@@ -722,7 +722,7 @@ mod tests {
                     variable_id: 3,
                     variable_type: HIRType::Infer,
                     expression: HIRExpression::CallFunction {
-                        function: Variable::Named(CharacterPosition { line: 5, column: 55 }..CharacterPosition { line: 5, column: 58 }, SearchPaths(vec![vec!["_add".to_string()]])),
+                        function: Variable::Named(CharacterPosition { line: 5, column: 55 }..CharacterPosition { line: 5, column: 58 }, Vec::new(), SearchPaths(vec![vec!["_add".to_string()]])),
                         arguments: vec![Variable::Unnamed(1), Variable::Unnamed(2)],
                     },
                 },
@@ -730,8 +730,8 @@ mod tests {
                     variable_id: 4,
                     variable_type: HIRType::Infer,
                     expression: HIRExpression::CallFunction {
-                        function: Variable::Named(CharacterPosition { line: 5, column: 30 }..CharacterPosition { line: 5, column: 41 }, SearchPaths(vec![vec!["array".to_string(), "fill".to_string()], vec!["std".to_string(), "array".to_string(), "fill".to_string()]])),
-                        arguments: vec![Variable::Named(CharacterPosition { line: 5, column: 42 }..CharacterPosition { line: 5, column: 47 }, SearchPaths(vec![vec!["false".to_string()]])), Variable::Unnamed(3)],
+                        function: Variable::Named(CharacterPosition { line: 5, column: 30 }..CharacterPosition { line: 5, column: 41 }, Vec::new(), SearchPaths(vec![vec!["array".to_string(), "fill".to_string()], vec!["std".to_string(), "array".to_string(), "fill".to_string()]])),
+                        arguments: vec![Variable::Named(CharacterPosition { line: 5, column: 42 }..CharacterPosition { line: 5, column: 47 }, Vec::new(), SearchPaths(vec![vec!["false".to_string()]])), Variable::Unnamed(3)],
                     },
                 },
                 HIRStatement::Binding {
@@ -762,7 +762,7 @@ mod tests {
                             variable_id: 9,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 7, column: 28 }..CharacterPosition { line: 7, column: 31 }, SearchPaths(vec![vec!["_add".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 7, column: 28 }..CharacterPosition { line: 7, column: 31 }, Vec::new(), SearchPaths(vec![vec!["_add".to_string()]])),
                                 arguments: vec![Variable::Unnamed(1), Variable::Unnamed(8)],
                             },
                         },
@@ -770,7 +770,7 @@ mod tests {
                             variable_id: 10,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 7, column: 19 }..CharacterPosition { line: 7, column: 22 }, SearchPaths(vec![vec!["_gt".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 7, column: 19 }..CharacterPosition { line: 7, column: 22 }, Vec::new(), SearchPaths(vec![vec!["_gt".to_string()]])),
                                 arguments: vec![Variable::Unnamed(9), Variable::Unnamed(7)],
                             },
                         },
@@ -778,7 +778,7 @@ mod tests {
                             variable_id: 11,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 7, column: 18 }..CharacterPosition { line: 7, column: 32 }, SearchPaths(vec![vec!["_not".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 7, column: 18 }..CharacterPosition { line: 7, column: 32 }, Vec::new(), SearchPaths(vec![vec!["_not".to_string()]])),
                                 arguments: vec![Variable::Unnamed(10)],
                             },
                         },
@@ -800,8 +800,8 @@ mod tests {
                             variable_id: 14,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 8, column: 20 }..CharacterPosition { line: 8, column: 21 }, SearchPaths(vec![vec!["_set_item".to_string()]])),
-                                arguments: vec![Variable::Unnamed(5), Variable::Unnamed(7), Variable::Named(CharacterPosition { line: 8, column: 25 }..CharacterPosition { line: 8, column: 29 }, SearchPaths(vec![vec!["true".to_string()]]))],
+                                function: Variable::Named(CharacterPosition { line: 8, column: 20 }..CharacterPosition { line: 8, column: 21 }, Vec::new(), SearchPaths(vec![vec!["_set_item".to_string()]])),
+                                arguments: vec![Variable::Unnamed(5), Variable::Unnamed(7), Variable::Named(CharacterPosition { line: 8, column: 25 }..CharacterPosition { line: 8, column: 29 }, Vec::new(), SearchPaths(vec![vec!["true".to_string()]]))],
                             },
                         },
                         HIRStatement::Binding {
@@ -813,7 +813,7 @@ mod tests {
                             variable_id: 16,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 9, column: 21 }..CharacterPosition { line: 9, column: 24 }, SearchPaths(vec![vec!["_add".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 9, column: 21 }..CharacterPosition { line: 9, column: 24 }, Vec::new(), SearchPaths(vec![vec!["_add".to_string()]])),
                                 arguments: vec![Variable::Unnamed(7), Variable::Unnamed(15)],
                             },
                         },
@@ -845,7 +845,7 @@ mod tests {
                             variable_id: 21,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 13, column: 19 }..CharacterPosition { line: 13, column: 23 }, SearchPaths(vec![vec!["_gt".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 13, column: 19 }..CharacterPosition { line: 13, column: 23 }, Vec::new(), SearchPaths(vec![vec!["_gt".to_string()]])),
                                 arguments: vec![Variable::Unnamed(20), Variable::Unnamed(1)],
                             },
                         },
@@ -853,7 +853,7 @@ mod tests {
                             variable_id: 22,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 13, column: 19 }..CharacterPosition { line: 13, column: 23 }, SearchPaths(vec![vec!["_not".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 13, column: 19 }..CharacterPosition { line: 13, column: 23 }, Vec::new(), SearchPaths(vec![vec!["_not".to_string()]])),
                                 arguments: vec![Variable::Unnamed(21)],
                             },
                         },
@@ -861,7 +861,7 @@ mod tests {
                             variable_id: 23,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 13, column: 18 }..CharacterPosition { line: 13, column: 29 }, SearchPaths(vec![vec!["_not".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 13, column: 18 }..CharacterPosition { line: 13, column: 29 }, Vec::new(), SearchPaths(vec![vec!["_not".to_string()]])),
                                 arguments: vec![Variable::Unnamed(22)],
                             },
                         },
@@ -883,7 +883,7 @@ mod tests {
                             variable_id: 26,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 14, column: 23 }..CharacterPosition { line: 14, column: 24 }, SearchPaths(vec![vec!["_get_item".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 14, column: 23 }..CharacterPosition { line: 14, column: 24 }, Vec::new(), SearchPaths(vec![vec!["_get_item".to_string()]])),
                                 arguments: vec![Variable::Unnamed(5), Variable::Unnamed(20)],
                             },
                         },
@@ -917,7 +917,7 @@ mod tests {
                             variable_id: 30,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 16, column: 29 }..CharacterPosition { line: 16, column: 32 }, SearchPaths(vec![vec!["_mul".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 16, column: 29 }..CharacterPosition { line: 16, column: 32 }, Vec::new(), SearchPaths(vec![vec!["_mul".to_string()]])),
                                 arguments: vec![Variable::Unnamed(20), Variable::Unnamed(20)],
                             },
                         },
@@ -934,7 +934,7 @@ mod tests {
                                     variable_id: 32,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 17, column: 27 }..CharacterPosition { line: 17, column: 31 }, SearchPaths(vec![vec!["_gt".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 17, column: 27 }..CharacterPosition { line: 17, column: 31 }, Vec::new(), SearchPaths(vec![vec!["_gt".to_string()]])),
                                         arguments: vec![Variable::Unnamed(31), Variable::Unnamed(1)],
                                     },
                                 },
@@ -942,7 +942,7 @@ mod tests {
                                     variable_id: 33,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 17, column: 27 }..CharacterPosition { line: 17, column: 31 }, SearchPaths(vec![vec!["_not".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 17, column: 27 }..CharacterPosition { line: 17, column: 31 }, Vec::new(), SearchPaths(vec![vec!["_not".to_string()]])),
                                         arguments: vec![Variable::Unnamed(32)],
                                     },
                                 },
@@ -950,7 +950,7 @@ mod tests {
                                     variable_id: 34,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 17, column: 26 }..CharacterPosition { line: 17, column: 37 }, SearchPaths(vec![vec!["_not".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 17, column: 26 }..CharacterPosition { line: 17, column: 37 }, Vec::new(), SearchPaths(vec![vec!["_not".to_string()]])),
                                         arguments: vec![Variable::Unnamed(33)],
                                     },
                                 },
@@ -972,15 +972,15 @@ mod tests {
                                     variable_id: 37,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 18, column: 28 }..CharacterPosition { line: 18, column: 29 }, SearchPaths(vec![vec!["_set_item".to_string()]])),
-                                        arguments: vec![Variable::Unnamed(5), Variable::Unnamed(31), Variable::Named(CharacterPosition { line: 18, column: 33 }..CharacterPosition { line: 18, column: 37 }, SearchPaths(vec![vec!["true".to_string()]]))],
+                                        function: Variable::Named(CharacterPosition { line: 18, column: 28 }..CharacterPosition { line: 18, column: 29 }, Vec::new(), SearchPaths(vec![vec!["_set_item".to_string()]])),
+                                        arguments: vec![Variable::Unnamed(5), Variable::Unnamed(31), Variable::Named(CharacterPosition { line: 18, column: 33 }..CharacterPosition { line: 18, column: 37 }, Vec::new(), SearchPaths(vec![vec!["true".to_string()]]))],
                                     },
                                 },
                                 HIRStatement::Binding {
                                     variable_id: 38,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 19, column: 29 }..CharacterPosition { line: 19, column: 32 }, SearchPaths(vec![vec!["_add".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 19, column: 29 }..CharacterPosition { line: 19, column: 32 }, Vec::new(), SearchPaths(vec![vec!["_add".to_string()]])),
                                         arguments: vec![Variable::Unnamed(31), Variable::Unnamed(20)],
                                     },
                                 },
@@ -1008,7 +1008,7 @@ mod tests {
                             variable_id: 43,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 22, column: 21 }..CharacterPosition { line: 22, column: 24 }, SearchPaths(vec![vec!["_add".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 22, column: 21 }..CharacterPosition { line: 22, column: 24 }, Vec::new(), SearchPaths(vec![vec!["_add".to_string()]])),
                                 arguments: vec![Variable::Unnamed(20), Variable::Unnamed(42)],
                             },
                         },
@@ -1026,7 +1026,7 @@ mod tests {
                     variable_id: 46,
                     variable_type: HIRType::Infer,
                     expression: HIRExpression::CallFunction {
-                        function: Variable::Named(CharacterPosition { line: 25, column: 20 }..CharacterPosition { line: 25, column: 26 }, SearchPaths(vec![vec!["_get_item".to_string()]])),
+                        function: Variable::Named(CharacterPosition { line: 25, column: 20 }..CharacterPosition { line: 25, column: 26 }, Vec::new(), SearchPaths(vec![vec!["_get_item".to_string()]])),
                         arguments: vec![Variable::Unnamed(5), Variable::Unnamed(1)],
                     },
                 },
@@ -1034,7 +1034,7 @@ mod tests {
                     variable_id: 47,
                     variable_type: HIRType::Infer,
                     expression: HIRExpression::CallFunction {
-                        function: Variable::Named(CharacterPosition { line: 25, column: 16 }..CharacterPosition { line: 25, column: 27 }, SearchPaths(vec![vec!["_not".to_string()]])),
+                        function: Variable::Named(CharacterPosition { line: 25, column: 16 }..CharacterPosition { line: 25, column: 27 }, Vec::new(), SearchPaths(vec![vec!["_not".to_string()]])),
                         arguments: vec![Variable::Unnamed(46)],
                     },
                 },
@@ -1054,7 +1054,7 @@ mod tests {
                                     variable_id: 49,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 26, column: 16 }..CharacterPosition { line: 26, column: 23 }, SearchPaths(vec![vec!["println".to_string()], vec!["std".to_string(), "io".to_string(), "println".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 26, column: 16 }..CharacterPosition { line: 26, column: 23 }, Vec::new(), SearchPaths(vec![vec!["println".to_string()], vec!["std".to_string(), "io".to_string(), "println".to_string()]])),
                                         arguments: vec![Variable::Unnamed(48)],
                                     },
                                 },
@@ -1077,7 +1077,7 @@ mod tests {
                                     variable_id: 52,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 28, column: 16 }..CharacterPosition { line: 28, column: 23 }, SearchPaths(vec![vec!["println".to_string()], vec!["std".to_string(), "io".to_string(), "println".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 28, column: 16 }..CharacterPosition { line: 28, column: 23 }, Vec::new(), SearchPaths(vec![vec!["println".to_string()], vec!["std".to_string(), "io".to_string(), "println".to_string()]])),
                                         arguments: vec![Variable::Unnamed(51)],
                                     },
                                 },
@@ -1104,7 +1104,7 @@ mod tests {
                     variable_id: 0,
                     variable_type: HIRType::Infer,
                     expression: HIRExpression::CallFunction {
-                        function: Variable::Named(CharacterPosition { line: 3, column: 27 }..CharacterPosition { line: 3, column: 37 }, SearchPaths(vec![vec!["graph".to_string(), "get".to_string()]])),
+                        function: Variable::Named(CharacterPosition { line: 3, column: 27 }..CharacterPosition { line: 3, column: 37 }, Vec::new(), SearchPaths(vec![vec!["graph".to_string(), "get".to_string()]])),
                         arguments: vec![],
                     },
                 },
@@ -1124,6 +1124,7 @@ mod tests {
                     expression: HIRExpression::CallFunction {
                         function: Variable::Named(
                             CharacterPosition { line: 4, column: 20 }..CharacterPosition { line: 4, column: 30 },
+                            Vec::new(),
                             SearchPaths(vec![vec!["deque".to_string(), "new".to_string()], vec!["std".to_string(), "collections".to_string(), "deque".to_string(), "new".to_string()]]),
                         ),
                         arguments: vec![],
@@ -1145,6 +1146,7 @@ mod tests {
                     expression: HIRExpression::CallFunction {
                         function: Variable::Named(
                             CharacterPosition { line: 5, column: 14 }..CharacterPosition { line: 5, column: 30 },
+                            Vec::new(),
                             SearchPaths(vec![vec!["deque".to_string(), "push_back".to_string()], vec!["std".to_string(), "collections".to_string(), "deque".to_string(), "push_back".to_string()]]),
                         ),
                         arguments: vec![Variable::Unnamed(4), Variable::Unnamed(5)],
@@ -1160,6 +1162,7 @@ mod tests {
                             expression: HIRExpression::CallFunction {
                                 function: Variable::Named(
                                     CharacterPosition { line: 6, column: 47 }..CharacterPosition { line: 6, column: 63 },
+                                    Vec::new(),
                                     SearchPaths(vec![vec!["deque".to_string(), "pop_front".to_string()], vec!["std".to_string(), "collections".to_string(), "deque".to_string(), "pop_front".to_string()]]),
                                 ),
                                 arguments: vec![Variable::Unnamed(4)],
@@ -1195,7 +1198,7 @@ mod tests {
                             variable_id: 12,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 7, column: 30 }..CharacterPosition { line: 7, column: 40 }, SearchPaths(vec![vec!["_get_item".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 7, column: 30 }..CharacterPosition { line: 7, column: 40 }, Vec::new(), SearchPaths(vec![vec!["_get_item".to_string()]])),
                                 arguments: vec![Variable::Unnamed(2), Variable::Unnamed(11)],
                             },
                         },
@@ -1203,7 +1206,7 @@ mod tests {
                             variable_id: 13,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 7, column: 16 }..CharacterPosition { line: 7, column: 23 }, SearchPaths(vec![vec!["println".to_string()], vec!["std".to_string(), "io".to_string(), "println".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 7, column: 16 }..CharacterPosition { line: 7, column: 23 }, Vec::new(), SearchPaths(vec![vec!["println".to_string()], vec!["std".to_string(), "io".to_string(), "println".to_string()]])),
                                 arguments: vec![Variable::Unnamed(12)],
                             },
                         },
@@ -1211,7 +1214,7 @@ mod tests {
                             variable_id: 14,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 8, column: 35 }..CharacterPosition { line: 8, column: 45 }, SearchPaths(vec![vec!["_get_item".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 8, column: 35 }..CharacterPosition { line: 8, column: 45 }, Vec::new(), SearchPaths(vec![vec!["_get_item".to_string()]])),
                                 arguments: vec![Variable::Unnamed(2), Variable::Unnamed(11)],
                             },
                         },
@@ -1219,7 +1222,7 @@ mod tests {
                             variable_id: 15,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 8, column: 47 }..CharacterPosition { line: 8, column: 62 }, SearchPaths(vec![vec!["graph".to_string(), "children".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 8, column: 47 }..CharacterPosition { line: 8, column: 62 }, Vec::new(), SearchPaths(vec![vec!["graph".to_string(), "children".to_string()]])),
                                 arguments: vec![Variable::Unnamed(14)],
                             },
                         },
@@ -1227,7 +1230,7 @@ mod tests {
                             variable_id: 16,
                             variable_type: HIRType::Infer,
                             expression: HIRExpression::CallFunction {
-                                function: Variable::Named(CharacterPosition { line: 8, column: 29 }..CharacterPosition { line: 8, column: 64 }, SearchPaths(vec![vec!["_iterator".to_string()]])),
+                                function: Variable::Named(CharacterPosition { line: 8, column: 29 }..CharacterPosition { line: 8, column: 64 }, Vec::new(), SearchPaths(vec![vec!["_iterator".to_string()]])),
                                 arguments: vec![Variable::Unnamed(15)],
                             },
                         },
@@ -1239,7 +1242,7 @@ mod tests {
                                     variable_id: 17,
                                     variable_type: HIRType::Or(vec![HIRType::Tuple(vec![]), HIRType::AnonymousStruct(vec![("value".to_string(), HIRType::Infer)].into_iter().collect())]),
                                     expression: HIRExpression::CallFunction {
-                                        function: Variable::Named(CharacterPosition { line: 8, column: 29 }..CharacterPosition { line: 8, column: 64 }, SearchPaths(vec![vec!["_next".to_string()]])),
+                                        function: Variable::Named(CharacterPosition { line: 8, column: 29 }..CharacterPosition { line: 8, column: 64 }, Vec::new(), SearchPaths(vec![vec!["_next".to_string()]])),
                                         arguments: vec![Variable::Unnamed(16)],
                                     },
                                 },
@@ -1277,6 +1280,7 @@ mod tests {
                                     expression: HIRExpression::CallFunction {
                                         function: Variable::Named(
                                             CharacterPosition { line: 9, column: 22 }..CharacterPosition { line: 9, column: 38 },
+                                            Vec::new(),
                                             SearchPaths(vec![vec!["deque".to_string(), "push_back".to_string()], vec!["std".to_string(), "collections".to_string(), "deque".to_string(), "push_back".to_string()]]),
                                         ),
                                         arguments: vec![Variable::Unnamed(4), Variable::Unnamed(21)],

@@ -106,7 +106,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                         },
                         HIRExpression::CallFunction { function, arguments: actual_arguments } => {
                             let (position, ResolvedItems(paths, function)) = match function {
-                                Variable::Named(position, candidates) => (position.clone(), candidates),
+                                Variable::Named(position, _, candidates) => (position.clone(), candidates),
                                 Variable::Unnamed(_) => {
                                     return Err(DecisionTypeError::UnImplementedFeature("Call function referenced by variable"));
                                 }
@@ -115,7 +115,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 HIRType::Function { arguments: formal_arguments, .. } => {
                                     formal_arguments.len() == actual_arguments.len()
                                         && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
-                                            Variable::Named(_, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
+                                            Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
                                             Variable::Unnamed(id) => types[*id].is_a(formal),
                                         })
                                 }
@@ -125,7 +125,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 let (_, _, function_type) = function.last().unwrap();
                                 if let HIRType::Function { arguments, result } = function_type {
                                     for (formal, actual) in arguments.iter().zip(actual_arguments) {
-                                        if let Variable::Named(position, ResolvedItems(paths, candidates)) = actual {
+                                        if let Variable::Named(position, _, ResolvedItems(paths, candidates)) = actual {
                                             candidates.retain(|(_, _, ty)| ty.is_a(formal));
                                             if candidates.len() != 1 {
                                                 return Err(DecisionTypeError::NamedReferenceIsNotUnique {
@@ -144,7 +144,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             }
                         }
                         HIRExpression::AccessVariable(variable) => match variable {
-                            Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                            Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                 if let [(_, _, ty)] = candidates.as_slice() {
                                     (ty.clone(), Reachable::Reachable)
                                 } else {
@@ -157,7 +157,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             Variable::Unnamed(id) => (types[*id].clone(), Reachable::Reachable),
                         },
                         HIRExpression::AccessTupleItem { variable, index } => match variable {
-                            Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                            Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                 candidates.retain(|(_, _, ty)| ty.has_tuple_item(*index));
                                 if let [(_, _, ty)] = candidates.as_slice() {
                                     (ty.tuple_item_type(*index).unwrap().into_owned(), Reachable::Reachable)
@@ -180,7 +180,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             }
                         },
                         HIRExpression::AccessMember { variable, member } => match variable {
-                            Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                            Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                 candidates.retain(|(_, _, ty)| ty.has_member(member));
                                 if let [(_, _, ty)] = candidates.as_slice() {
                                     (ty.member_type(member).unwrap().into_owned(), Reachable::Reachable)
@@ -209,7 +209,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                         } => {
                             let bool_type = HIRType::Named { path: vec!["Bool".to_string()], generics_arguments: Vec::new() };
                             match condition {
-                                Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                     candidates.retain(|(_, _, ty)| ty.is_a(&bool_type));
                                     if candidates.len() != 1 {
                                         return Err(DecisionTypeError::NamedReferenceIsNotUnique {
@@ -230,7 +230,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 Reachable::Reachable => {
                                     unreachable = false;
                                     match then_expr {
-                                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                        Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                             if candidates.len() == 1 {
                                                 candidates.first().unwrap().2.clone()
                                             } else {
@@ -249,7 +249,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 Reachable::Reachable => {
                                     unreachable = false;
                                     match other_expr {
-                                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                        Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                             if candidates.len() == 1 {
                                                 candidates.first().unwrap().2.clone()
                                             } else {
@@ -275,7 +275,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             other: (other_statements, other_expr),
                         } => {
                             let (possibility_assign, is_a, mut condition_type) = match condition {
-                                Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                     candidates.retain(|(_, _, ty)| ty.is_a(pattern_type));
                                     if candidates.len() != 1 {
                                         return Err(DecisionTypeError::NamedReferenceIsNotUnique {
@@ -303,7 +303,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 Reachable::Reachable => {
                                     unreachable = false;
                                     match then_expr {
-                                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                        Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                             if candidates.len() == 1 {
                                                 candidates.first().unwrap().2.clone()
                                             } else {
@@ -322,7 +322,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 Reachable::Reachable => {
                                     unreachable = false;
                                     match other_expr {
-                                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                        Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                             if candidates.len() == 1 {
                                                 candidates.first().unwrap().2.clone()
                                             } else {
@@ -347,7 +347,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                         }
                         HIRExpression::Assign { variable, value } => {
                             let value_type = match value {
-                                Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                     if let [(_, _, ty)] = candidates.as_slice() {
                                         ty
                                     } else {
@@ -415,7 +415,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             let mut items_type = BTreeMap::new();
                             for (member, variable) in items {
                                 let ty = match variable {
-                                    Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                    Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                         if let [(_, _, ty)] = candidates.as_slice() {
                                             ty.clone()
                                         } else {
@@ -435,7 +435,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             let mut items_type = Vec::with_capacity(items.len());
                             for variable in items {
                                 match variable {
-                                    Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                    Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                         if let [(_, _, ty)] = candidates.as_slice() {
                                             items_type.push(ty.clone());
                                         } else {
@@ -458,7 +458,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                             let mut items_type = Vec::with_capacity(items.len());
                             for variable in items {
                                 match variable {
-                                    Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                                    Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                                         if let [(_, _, ty)] = candidates.as_slice() {
                                             items_type.push(ty.clone());
                                         } else {
@@ -488,7 +488,7 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                 HIRStatement::Unreachable => Ok(Reachable::Unreachable),
                 HIRStatement::Return(return_value) => {
                     match return_value {
-                        Variable::Named(position, ResolvedItems(paths, candidates)) => {
+                        Variable::Named(position, _, ResolvedItems(paths, candidates)) => {
                             candidates.retain(|(_, _, ty)| ty.is_a(return_type));
                             if candidates.len() != 1 {
                                 return Err(DecisionTypeError::NamedReferenceIsNotUnique {
@@ -520,10 +520,10 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
     fn into_one_candidate(statements: Vec<HIRStatement<ResolvedItems>>) -> Vec<HIRStatement<(Uuid, HIRType)>> {
         fn into_one(variable: Variable<ResolvedItems>) -> Variable<(Uuid, HIRType)> {
             match variable {
-                Variable::Named(position, ResolvedItems(_, mut candidates)) => {
+                Variable::Named(position, types, ResolvedItems(_, mut candidates)) => {
                     assert_eq!(candidates.len(), 1, "前半で候補はひとつに絞られているはず");
                     let (_, id, ty) = candidates.pop().unwrap();
-                    Variable::Named(position, (id, ty))
+                    Variable::Named(position, types, (id, ty))
                 }
                 Variable::Unnamed(id) => Variable::Unnamed(id),
             }
@@ -596,7 +596,7 @@ pub fn used_functions(statements: &[HIRStatement<(Uuid, HIRType)>]) -> HashSet<U
     fn inner(statements: &[HIRStatement<(Uuid, HIRType)>], result: &mut HashSet<Uuid>) {
         fn add_used_variable(variable: &Variable<(Uuid, HIRType)>, result: &mut HashSet<Uuid>) {
             match variable {
-                Variable::Named(_, (id, _)) => {
+                Variable::Named(_, _, (id, _)) => {
                     result.insert(*id);
                 }
                 Variable::Unnamed(_) => {}
