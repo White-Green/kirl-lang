@@ -12,3 +12,4 @@ kirl_parser = { path = "../kirl_parser" }
 kirl_semantic_analyzer = { path = "../kirl_semantic_analyzer" }
 kirl_vm = { path = "../kirl_vm" }
 kirl_stdlib = { path = "../kirl_stdlib" }
+kirl_common = { path = "../kirl_common" }

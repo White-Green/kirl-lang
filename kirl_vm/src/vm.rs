@@ -1,7 +1,8 @@
+use kirl_common::interface::{InterchangeKirlVMValue, KirlVMValueCloneable};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use crate::bytecode::{InterchangeKirlVMValue, KirlByteCodeOpcode, KirlVMExecutable, KirlVMValueCloneable};
+use crate::bytecode::{KirlByteCodeOpcode, KirlVMExecutable};
 
 fn unwrap<T: Clone>(ptr: Arc<RwLock<T>>) -> T {
     Arc::try_unwrap(ptr).map(|rw| rw.into_inner().expect("")).unwrap_or_else(|ptr| ptr.read().expect("").clone())

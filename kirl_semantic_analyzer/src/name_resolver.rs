@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, HashMap};
 
+use kirl_common::typing::HIRType;
 use uuid::Uuid;
 
 use crate::syntax_tree_to_hir::SearchPaths;
-use crate::{HIRExpression, HIRStatement, HIRType, ReferenceAccess, Variable};
+use crate::{HIRExpression, HIRStatement, ReferenceAccess, Variable};
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct ResolvedItems(pub(crate) SearchPaths, pub(crate) Vec<(Vec<String>, Uuid, HIRType)>);

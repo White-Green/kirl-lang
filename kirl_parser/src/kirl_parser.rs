@@ -1,11 +1,13 @@
-use std::mem;
-use std::ops::Range;
-
-use dec::Decimal128;
+use kirl_common::dec::Decimal128;
+use kirl_common::typing::HIRType;
 use parser::enum_index_derive::*;
 use parser::Symbol::{Error, NonTerminal, Terminal};
 use parser::{enum_index, LR1Parser};
 use parser_generator::parser;
+use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
+use std::mem;
+use std::ops::Range;
 
 use crate::kirl_tokenizer::Token;
 use crate::{CharacterPosition, ParseErrorDetail};
@@ -144,6 +146,94 @@ pub enum Type {
 impl Default for Type {
     fn default() -> Self {
         Type::None
+    }
+}
+
+#[derive(Debug)]
+pub enum HIRTypeConvertError {
+    DuplicatedMember(String),
+}
+
+impl Display for HIRTypeConvertError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HIRTypeConvertError::DuplicatedMember(name) => write!(f, "member {:?} is duplicated.", name),
+        }
+    }
+}
+
+impl std::error::Error for HIRTypeConvertError {}
+
+pub(crate) trait TryMapCollect: Sized + IntoIterator {
+    fn try_map_collect<T, E>(self, mut map: impl FnMut(Self::Item) -> Result<T, E>) -> Result<Vec<T>, E> {
+        let mut result = Vec::new();
+        for item in self {
+            result.push(map(item)?);
+        }
+        Ok(result)
+    }
+}
+
+impl<I: Sized + IntoIterator> TryMapCollect for I {}
+
+impl TryFrom<Type> for HIRType {
+    type Error = HIRTypeConvertError;
+    fn try_from(ty: Type) -> Result<Self, Self::Error> {
+        match ty {
+            Type::None => Ok(HIRType::Tuple(Vec::new())),
+            Type::Unreachable(_) => Ok(HIRType::Unreachable),
+            Type::NamedType(NamedType { path, generics_arguments, .. }) => Ok(HIRType::Named {
+                path,
+                generics_arguments: generics_arguments.into_iter().try_map_collect(TryInto::try_into)?,
+            }),
+            Type::Tuple(_, items) => Ok(HIRType::Tuple(items.into_iter().try_map_collect(TryInto::try_into)?)),
+            Type::Array(_, item) => Ok(HIRType::Array(Box::new((*item).try_into()?))),
+            Type::Function(FunctionType { argument, result, .. }) => Ok(HIRType::Function {
+                arguments: argument.into_iter().try_map_collect(TryInto::try_into)?,
+                result: Box::new((*result).try_into()?),
+            }),
+            Type::AnonymousStruct(AnonymousStructType { members, .. }) => {
+                let mut result_members = BTreeMap::new();
+                for (member, ty) in members {
+                    if result_members.contains_key(&member) {
+                        return Err(HIRTypeConvertError::DuplicatedMember(member));
+                    }
+                    result_members.insert(member, ty.try_into()?);
+                }
+                Ok(HIRType::AnonymousStruct(result_members))
+            }
+            Type::Or(_, items) => Ok(HIRType::Or(items.into_iter().try_map_collect(TryInto::try_into)?)),
+        }
+    }
+}
+
+impl TryFrom<&Pattern> for HIRType {
+    type Error = HIRTypeConvertError;
+    fn try_from(value: &Pattern) -> Result<Self, Self::Error> {
+        match value {
+            Pattern::Variable(_) => Ok(HIRType::Infer),
+            Pattern::Tuple(items) => {
+                let mut result = Vec::with_capacity(items.len());
+                for pat in items {
+                    result.push(pat.try_into()?);
+                }
+                Ok(HIRType::Tuple(result))
+            }
+            Pattern::Struct(StructName::Named(NamedType { path, generics_arguments, .. }), _) => Ok(HIRType::Named {
+                path: path.clone(),
+                generics_arguments: generics_arguments.iter().cloned().try_map_collect(TryInto::try_into)?,
+            }),
+            Pattern::Struct(StructName::Anonymous, members) => {
+                let mut result_members = BTreeMap::new();
+                for (name, pattern) in members {
+                    if result_members.contains_key(name) {
+                        return Err(HIRTypeConvertError::DuplicatedMember(name.clone()));
+                    }
+                    result_members.insert(name.clone(), pattern.try_into()?);
+                }
+                Ok(HIRType::AnonymousStruct(result_members))
+            }
+        }
     }
 }
 

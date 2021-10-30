@@ -3,13 +3,13 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::{Arc, Mutex, RwLock};
 
-use dec::Decimal128;
+use kirl_common::dec::Decimal128;
+use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValueCloneable};
+use kirl_common::typing::HIRType;
 use once_cell::sync::Lazy;
 use uuid::Uuid;
 
 use kirl_semantic_analyzer::name_resolver::KirlNameResolver;
-use kirl_semantic_analyzer::HIRType;
-use kirl_vm::bytecode::{FunctionWrapper, KirlRustFunction, KirlVMValueCloneable};
 
 enum FunctionOrChildren {
     Function(Arc<Mutex<dyn KirlRustFunction>>, Uuid, HIRType),

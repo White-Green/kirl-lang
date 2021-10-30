@@ -1,6 +1,7 @@
 /*
 !/.gitignore
 !/kirl
+!/kirl_common
 !/kirl_engine
 !/kirl_vm
 !/kirl_parser

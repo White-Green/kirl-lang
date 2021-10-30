@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Range;
 use std::str::FromStr;
 
-use dec::{Decimal128, ParseDecimalError};
+use kirl_common::dec::{Decimal128, ParseDecimalError};
 use parser::enum_index;
 use parser::enum_index_derive::*;
 use tokenizer::DFATokenizer;
@@ -326,7 +326,7 @@ fn parse_string_literal(s: &str) -> Option<String> {
 mod tests {
     use std::str::FromStr;
 
-    use dec::Decimal128;
+    use kirl_common::dec::Decimal128;
     use tokenizer::Tokenize;
 
     use crate::kirl_tokenizer::{get_tokenizer, CharacterPosition, Token};

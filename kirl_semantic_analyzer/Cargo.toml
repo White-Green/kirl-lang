@@ -10,5 +10,5 @@ edition = "2021"
 kirl_parser = { path = "../kirl_parser" }
 regex = "1.5.4"
 uuid = "0.8.2"
-dec = "0.4.5"
 take_mut = "0.2.2"
+kirl_common = { path = "../kirl_common" }

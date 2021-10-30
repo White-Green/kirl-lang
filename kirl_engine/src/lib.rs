@@ -5,6 +5,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
+use kirl_common::typing::HIRType;
 use uuid::Uuid;
 
 use kirl_parser::kirl_parser::Function;
@@ -12,7 +13,7 @@ use kirl_parser::{KirlParseError, KirlParser};
 use kirl_semantic_analyzer::name_resolver::{resolve_statements, statement_references, KirlNameResolver};
 use kirl_semantic_analyzer::syntax_tree_to_hir::{analysis_function, analysis_statements, AnalysisStatementError, SearchPaths};
 use kirl_semantic_analyzer::type_checker::{decision_type, used_functions, DecisionTypeError};
-use kirl_semantic_analyzer::{collect_top_level_item_with_imports, HIRStatement, HIRType, KirlTopLevelItems, WithImport};
+use kirl_semantic_analyzer::{collect_top_level_item_with_imports, HIRStatement, KirlTopLevelItems, WithImport};
 use kirl_stdlib::get_stdlib;
 use kirl_vm::bytecode::KirlVMExecutable;
 use kirl_vm::lir::{hir_to_lir, LIRStatementList, LIRStatementListConvertError};

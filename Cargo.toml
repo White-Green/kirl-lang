@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "kirl",
+    "kirl_common",
     "kirl_parser",
     "kirl_semantic_analyzer",
     "kirl_vm",

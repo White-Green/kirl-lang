@@ -1,11 +1,12 @@
+use kirl_common::typing::HIRType;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use kirl_parser::kirl_parser::{Block, Condition, ConstructStruct, Expression, ExpressionItem, ForStatement, Function, FunctionReference, If, ImportPath, LetBinding, Path, Pattern, Statement, StatementItem, WhileStatement};
+use kirl_parser::kirl_parser::{Block, Condition, ConstructStruct, Expression, ExpressionItem, ForStatement, Function, FunctionReference, HIRTypeConvertError, If, ImportPath, LetBinding, Path, Pattern, Statement, StatementItem, WhileStatement};
 
-use crate::{HIRExpression, HIRStatement, HIRType, HIRTypeConvertError, Immediate, ReferenceAccess, StatementReachable, TryMapCollect, Variable, WithImport};
+use crate::{HIRExpression, HIRStatement, Immediate, ReferenceAccess, StatementReachable, Variable, WithImport};
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct SearchPaths(pub(crate) Vec<Vec<String>>);
@@ -431,6 +432,18 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
         }
     }
 }
+
+pub(crate) trait TryMapCollect: Sized + IntoIterator {
+    fn try_map_collect<T, E>(self, mut map: impl FnMut(Self::Item) -> Result<T, E>) -> Result<Vec<T>, E> {
+        let mut result = Vec::new();
+        for item in self {
+            result.push(map(item)?);
+        }
+        Ok(result)
+    }
+}
+
+impl<I: Sized + IntoIterator> TryMapCollect for I {}
 
 fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<HIRStatement<SearchPaths>>, variables: &mut BTreeMap<String, usize>, variable_sequence: &mut usize, imports: &mut BTreeMap<String, HashSet<Vec<String>>>, generics_argument_names: &HashMap<&str, usize>) -> AnalysisStatementResult<(StatementReachable, Variable<SearchPaths>)> {
     match expression {

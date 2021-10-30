@@ -4,13 +4,14 @@ use std::fmt::{Display, Formatter};
 use std::mem;
 use std::ops::{Deref, Range};
 
+use kirl_common::typing::HIRType;
 use uuid::Uuid;
 
 use kirl_parser::CharacterPosition;
 
 use crate::name_resolver::ResolvedItems;
 use crate::syntax_tree_to_hir::SearchPaths;
-use crate::{HIRExpression, HIRStatement, HIRType, Immediate, ReferenceAccess, Variable};
+use crate::{HIRExpression, HIRStatement, Immediate, ReferenceAccess, Variable};
 
 #[derive(Debug)]
 pub enum DecisionTypeError {
@@ -112,26 +113,30 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                 }
                             };
                             take_mut::take(function, |function| {
-                                function.into_iter().filter_map(|(path, id, ty)| {
-                                    let ty = match ty {
-                                        ty @ HIRType::Function { .. } => ty,
-                                        _ => return None,
-                                    };
-                                    let ty = ty.apply_generics_type_argument(generics_arguments)?;
-                                    match &ty {
-                                        HIRType::Function { arguments: formal_arguments, .. } => {
-                                            if !(formal_arguments.len() == actual_arguments.len()
-                                                && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
-                                                Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
-                                                Variable::Unnamed(id) => types[*id].is_a(formal),
-                                            })) {
-                                                return None;
+                                function
+                                    .into_iter()
+                                    .filter_map(|(path, id, ty)| {
+                                        let ty = match ty {
+                                            ty @ HIRType::Function { .. } => ty,
+                                            _ => return None,
+                                        };
+                                        let ty = ty.apply_generics_type_argument(generics_arguments)?;
+                                        match &ty {
+                                            HIRType::Function { arguments: formal_arguments, .. } => {
+                                                if !(formal_arguments.len() == actual_arguments.len()
+                                                    && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
+                                                        Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
+                                                        Variable::Unnamed(id) => types[*id].is_a(formal),
+                                                    }))
+                                                {
+                                                    return None;
+                                                }
                                             }
+                                            _ => unreachable!(),
                                         }
-                                        _ => unreachable!()
-                                    }
-                                    Some((path, id, ty))
-                                }).collect()
+                                        Some((path, id, ty))
+                                    })
+                                    .collect()
                             });
                             if function.len() == 1 {
                                 let (_, _, function_type) = function.last().unwrap();
