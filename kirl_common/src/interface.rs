@@ -1,4 +1,4 @@
-use crate::typing::LIRType;
+use crate::typing::{HIRType, LIRType};
 use dec::Decimal128;
 use once_cell::sync::Lazy;
 use std::any::{Any, TypeId};
@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 pub trait KirlRustFunction: Send + Sync {
-    fn static_type() -> Cow<'static, LIRType>
+    fn static_type() -> Cow<'static, HIRType>
     where
         Self: Sized;
     fn argument_count(&self) -> usize;
@@ -44,8 +44,8 @@ macro_rules! impl_fn {
                   E: std::error::Error + 'static,
                   Self: Send + Sync,
                   $($t: InterchangeKirlVMValue + Clone),* {
-            fn static_type() -> Cow<'static, LIRType> {
-                Cow::Owned(LIRType::Function { arguments: vec![$($t::static_type().into_owned()),*], result: Box::new(R::static_type().into_owned()) })
+            fn static_type() -> Cow<'static, HIRType> {
+                Cow::Owned(LIRType::Function { arguments: vec![$($t::static_type().into_owned()),*], result: Box::new(R::static_type().into_owned()) }.into())
             }
             fn argument_count(&self) -> usize { count!($($t),*) }
             fn call(&mut self, args: Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>) -> Result<Arc<RwLock<dyn KirlVMValueCloneable>>, Box<dyn Error>> {

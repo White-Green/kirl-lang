@@ -2,6 +2,7 @@
 members = [
     "kirl",
     "kirl_common",
+    "kirl_common_macro",
     "kirl_parser",
     "kirl_semantic_analyzer",
     "kirl_vm",

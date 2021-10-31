@@ -1,17 +1,17 @@
+use kirl_common::dec::Decimal128;
+use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValueCloneable};
+use kirl_common::typing::HIRType;
+use kirl_common_macro::kirl_function;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::{Arc, Mutex, RwLock};
-
-use kirl_common::dec::Decimal128;
-use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValueCloneable};
-use kirl_common::typing::HIRType;
-use once_cell::sync::Lazy;
 use uuid::Uuid;
 
 use kirl_semantic_analyzer::name_resolver::KirlNameResolver;
 
-enum FunctionOrChildren {
+pub enum FunctionOrChildren {
     Function(Arc<Mutex<dyn KirlRustFunction>>, Uuid, HIRType),
     StaticValue(Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>> + Send + Sync>, Uuid, HIRType),
     Children(HashMap<String, Vec<FunctionOrChildren>>),
@@ -27,33 +27,19 @@ impl Debug for FunctionOrChildren {
     }
 }
 
+impl FunctionOrChildren {
+    fn from_function<F: 'static + KirlRustFunction>(f: F) -> Self {
+        FunctionOrChildren::Function(Arc::new(Mutex::new(f)), Uuid::new_v4(), F::static_type().into_owned())
+    }
+
+    fn static_value<F: 'static + Fn() -> Value + Send + Sync, Value: KirlVMValueCloneable>(f: F) -> Self {
+        FunctionOrChildren::StaticValue(Arc::new(move || Arc::new(RwLock::new(f()))), Uuid::new_v4(), Value::static_type().into_owned().into())
+    }
+}
+
 impl From<HashMap<String, Vec<FunctionOrChildren>>> for FunctionOrChildren {
     fn from(value: HashMap<String, Vec<FunctionOrChildren>>) -> Self {
         FunctionOrChildren::Children(value)
-    }
-}
-
-impl From<(Arc<Mutex<dyn KirlRustFunction>>, Uuid, HIRType)> for FunctionOrChildren {
-    fn from((v1, v2, v3): (Arc<Mutex<dyn KirlRustFunction>>, Uuid, HIRType)) -> Self {
-        FunctionOrChildren::Function(v1, v2, v3)
-    }
-}
-
-impl<Args, Result, F> From<FunctionWrapper<Args, Result, F>> for FunctionOrChildren
-where
-    FunctionWrapper<Args, Result, F>: KirlRustFunction + 'static,
-{
-    fn from(function: FunctionWrapper<Args, Result, F>) -> Self {
-        FunctionOrChildren::Function(Arc::new(Mutex::new(function)), Uuid::new_v4(), FunctionWrapper::<Args, Result, F>::static_type().into_owned().into())
-    }
-}
-
-impl<F, Value: KirlVMValueCloneable> From<F> for FunctionOrChildren
-where
-    F: 'static + Fn() -> Value + Send + Sync,
-{
-    fn from(closure: F) -> Self {
-        FunctionOrChildren::StaticValue(Arc::new(move || Arc::new(RwLock::new(closure()))), Uuid::new_v4(), Value::static_type().into_owned().into())
     }
 }
 
@@ -188,31 +174,43 @@ impl Error for NoneError {}
 static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
     KirlStdLib(map! {
         io: map! {
-            print: FunctionWrapper::from(|s: String| Ok::<_, NoneError>(print!("{}", s))),
-            print: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(print!("{}", s.to_standard_notation_string()))),
-            print: FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(print!("{}", s))),
-            println: FunctionWrapper::from(|s: String| Ok::<_, NoneError>(println!("{}", s))),
-            println: FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(println!("{}", s.to_standard_notation_string()))),
-            println: FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(println!("{}", s))),
+            print: FunctionOrChildren::from_function({
+                #[kirl_function((String)->())]
+                fn string_print(s: Arc<RwLock<String>>) {
+                    print!("{}", s.read().unwrap());
+                }
+                string_print::new()
+            }),
+            print: FunctionOrChildren::from_function(FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(print!("{}", s.to_standard_notation_string())))),
+            print: FunctionOrChildren::from_function(FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(print!("{}", s)))),
+            println: FunctionOrChildren::from_function({
+                #[kirl_function((String)->())]
+                fn string_println(s: Arc<RwLock<String>>){
+                    println!("{}", s.read().unwrap());
+                }
+                string_println::new()
+            }),
+            println: FunctionOrChildren::from_function(FunctionWrapper::from(|s: Decimal128| Ok::<_, NoneError>(println!("{}", s.to_standard_notation_string())))),
+            println: FunctionOrChildren::from_function(FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(println!("{}", s)))),
         },
         bool: map!{
-            _not: FunctionWrapper::from(|a: bool| Ok::<_, NoneError>(!a)),
-            _or: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a | b)),
-            _and: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a & b)),
-            _xor: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a ^ b)),
-            _eq: FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a == b)),
-            true: ||true,
-            false: ||false,
+            _not: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool| Ok::<_, NoneError>(!a))),
+            _or: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a | b))),
+            _and: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a & b))),
+            _xor: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a ^ b))),
+            _eq: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a == b))),
+            true: FunctionOrChildren::static_value(||true),
+            false: FunctionOrChildren::static_value(||false),
         },
         num: map! {
-            _add: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a + b)),
-            _sub: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a - b)),
-            _mul: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a * b)),
-            _div: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a / b)),
-            _rem: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a % b)),
-            _eq: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a == b)),
-            _gt: FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a > b)),
-            _neg: FunctionWrapper::from(|a: Decimal128| Ok::<_, NoneError>(-a)),
+            _add: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a + b))),
+            _sub: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a - b))),
+            _mul: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a * b))),
+            _div: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a / b))),
+            _rem: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a % b))),
+            _eq: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a == b))),
+            _gt: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a > b))),
+            _neg: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128| Ok::<_, NoneError>(-a))),
         },
     })
 });
