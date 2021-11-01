@@ -130,11 +130,11 @@ impl<'a> Iterator for KirlStdLibStaticValues<'a> {
 }
 
 impl KirlStdLib {
-    pub fn functions(&self) -> impl IntoIterator<Item=(Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
+    pub fn functions(&self) -> impl IntoIterator<Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
         KirlStdLibFunctions { functions: Vec::new(), maps: vec![&self.0] }
     }
 
-    pub fn static_values(&self) -> impl IntoIterator<Item=(Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)> + '_ {
+    pub fn static_values(&self) -> impl IntoIterator<Item = (Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)> + '_ {
         KirlStdLibStaticValues { values: Vec::new(), maps: vec![&self.0] }
     }
 }
@@ -238,7 +238,6 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
                 _get_item: {
                     #[kirl_function(for<T> ([T], Number)->T )]
                     fn list_get_item(list: Arc<RwLock<Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>>>, index: Decimal128) -> Arc<RwLock<dyn KirlVMValueCloneable>> {
-
                         Arc::clone(&list.read().unwrap()[usize::try_from(dec::Decimal::<15>::from(index)).unwrap()])
                     }
                     FunctionOrChildren::from_function(list_get_item::new())

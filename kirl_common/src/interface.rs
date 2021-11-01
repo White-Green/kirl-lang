@@ -156,14 +156,21 @@ impl KirlVMValue for Decimal128 {
     }
 }
 
-impl KirlVMValue for () {
+impl InterchangeKirlVMValue for () {
     fn static_type() -> Cow<'static, LIRType> {
         static TYPE: Lazy<LIRType> = Lazy::new(|| get_type!(()).into_normalized());
         Cow::Borrowed(&TYPE)
     }
-
     fn get_type(&self) -> Cow<LIRType> {
-        <Self as KirlVMValue>::static_type()
+        Self::static_type()
+    }
+    fn into_kirl_value(self) -> Arc<RwLock<dyn KirlVMValueCloneable>> {
+        let value = Vec::<Arc<RwLock<dyn KirlVMValueCloneable>>>::new().into_boxed_slice();
+        Arc::new(RwLock::new(value))
+    }
+    fn try_from_kirl_value(value: Arc<RwLock<dyn KirlVMValueCloneable>>) -> Result<Arc<RwLock<Self>>, Arc<RwLock<dyn KirlVMValueCloneable>>> {
+        <Box<[Arc<RwLock<dyn KirlVMValueCloneable>>]>>::try_from_kirl_value(value)?;
+        Ok(Arc::new(RwLock::new(())))
     }
 }
 
