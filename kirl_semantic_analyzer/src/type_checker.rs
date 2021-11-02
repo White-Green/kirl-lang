@@ -74,6 +74,33 @@ impl Error for DecisionTypeError {}
 
 type DecisionTypeResult<T> = Result<T, DecisionTypeError>;
 
+pub fn is_a_with_generics(lhs: &HIRType, rhs: &HIRType, generics_type_arguments: &mut Vec<HIRType>) -> bool {
+    match (lhs, rhs) {
+        (lhs, HIRType::GenericsTypeArgument(i)) => match generics_type_arguments.get(*i) {
+            None | Some(HIRType::Infer) => {
+                if generics_type_arguments.len() <= *i {
+                    generics_type_arguments.resize_with(*i + 1, || HIRType::Infer);
+                }
+                generics_type_arguments[*i] = lhs.clone();
+                true
+            }
+            Some(rhs) => lhs.is_a(rhs),
+        },
+        (HIRType::Infer, _) => true,
+        (_, HIRType::Infer) => true,
+        (HIRType::Unreachable, _) => true,
+        (_, HIRType::Unreachable) => false,
+        (HIRType::Named { path: path1, generics_arguments: arg1 }, HIRType::Named { path: path2, generics_arguments: arg2 }) => path1 == path2 && arg1.len() == arg2.len() && arg1.iter().zip(arg2).all(|(ty1, ty2)| is_a_with_generics(ty1, ty2, generics_type_arguments)),
+        (HIRType::Tuple(items1), HIRType::Tuple(items2)) => items1.len() >= items2.len() && items1.iter().zip(items2).all(|(ty1, ty2)| is_a_with_generics(ty1, ty2, generics_type_arguments)),
+        (HIRType::Array(t1), HIRType::Array(t2)) => is_a_with_generics(t1, t2, generics_type_arguments),
+        (HIRType::Function { arguments: arg1, result: res1 }, HIRType::Function { arguments: arg2, result: res2 }) => arg1.len() == arg2.len() && arg2.iter().zip(arg1).all(|(ty1, ty2)| is_a_with_generics(ty1, ty2, generics_type_arguments)) && is_a_with_generics(res1, res2, generics_type_arguments),
+        (HIRType::AnonymousStruct(members1), HIRType::AnonymousStruct(members2)) => members2.iter().all(|(k, v2)| members1.get(k).map_or(false, |v1| is_a_with_generics(v1, v2, generics_type_arguments))),
+        (HIRType::Or(items1), ty2) => items1.iter().all(|ty1| is_a_with_generics(ty1, ty2, generics_type_arguments)),
+        (ty1, HIRType::Or(items2)) => items2.iter().any(|ty2| is_a_with_generics(ty1, ty2, generics_type_arguments)),
+        _ => false,
+    }
+}
+
 pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_types: Vec<HIRType>, return_type: HIRType) -> DecisionTypeResult<Vec<HIRStatement<(Uuid, HIRType)>>> {
     #[derive(Debug)]
     enum Reachable {
@@ -112,32 +139,54 @@ pub fn decision_type(mut statements: Vec<HIRStatement<ResolvedItems>>, argument_
                                     return Err(DecisionTypeError::UnImplementedFeature("Call function referenced by variable"));
                                 }
                             };
-                            take_mut::take(function, |function| {
-                                function
-                                    .into_iter()
-                                    .filter_map(|(path, id, ty)| {
-                                        let ty = match ty {
-                                            ty @ HIRType::Function { .. } => ty,
-                                            _ => return None,
-                                        };
-                                        let ty = ty.apply_generics_type_argument(generics_arguments)?;
-                                        match &ty {
-                                            HIRType::Function { arguments: formal_arguments, .. } => {
-                                                if !(formal_arguments.len() == actual_arguments.len()
-                                                    && actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
-                                                        Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
-                                                        Variable::Unnamed(id) => types[*id].is_a(formal),
-                                                    }))
-                                                {
-                                                    return None;
+                            if generics_arguments.is_empty() {
+                                take_mut::take(function, |function| {
+                                    function
+                                        .into_iter()
+                                        .filter_map(|(path, id, ty)| {
+                                            match &ty {
+                                                HIRType::Function { arguments: formal_arguments, .. } if formal_arguments.len() == actual_arguments.len() => {
+                                                    let mut generics_arguments = Vec::new();
+                                                    if actual_arguments.iter().zip(formal_arguments).all(|(actual, formal)| match actual {
+                                                        Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| is_a_with_generics(ty, formal, &mut generics_arguments) /*ty.is_a(formal)*/),
+                                                        Variable::Unnamed(id) => is_a_with_generics(&types[*id], formal, &mut generics_arguments), /*types[*id].is_a(formal)*/
+                                                    }) {
+                                                        Some((path, id, ty.apply_generics_type_argument(&generics_arguments)?))
+                                                    } else {
+                                                        None
+                                                    }
+                                                }
+                                                _ => None,
+                                            }
+                                        })
+                                        .collect()
+                                });
+                            } else {
+                                take_mut::take(function, |function| {
+                                    function
+                                        .into_iter()
+                                        .filter_map(|(path, id, ty)| match ty {
+                                            HIRType::Function { arguments: formal_arguments, result } if formal_arguments.len() == actual_arguments.len() => {
+                                                let formal_arguments = formal_arguments.iter().fold(Some(Vec::with_capacity(formal_arguments.len())), |acc, ty| {
+                                                    let mut acc = acc?;
+                                                    acc.push(ty.apply_generics_type_argument(generics_arguments)?);
+                                                    Some(acc)
+                                                })?;
+                                                let result = result.apply_generics_type_argument(generics_arguments)?;
+                                                if actual_arguments.iter().zip(&formal_arguments).all(|(actual, formal)| match actual {
+                                                    Variable::Named(_, _, ResolvedItems(_, candidates)) => candidates.iter().any(|(_, _, ty)| ty.is_a(formal)),
+                                                    Variable::Unnamed(id) => types[*id].is_a(formal),
+                                                }) {
+                                                    Some((path, id, HIRType::Function { arguments: formal_arguments, result: Box::new(result) }))
+                                                } else {
+                                                    None
                                                 }
                                             }
-                                            _ => unreachable!(),
-                                        }
-                                        Some((path, id, ty))
-                                    })
-                                    .collect()
-                            });
+                                            _ => None,
+                                        })
+                                        .collect()
+                                });
+                            }
                             if function.len() == 1 {
                                 let (_, _, function_type) = function.last().unwrap();
                                 if let HIRType::Function { arguments, result } = function_type {
