@@ -130,11 +130,11 @@ impl<'a> Iterator for KirlStdLibStaticValues<'a> {
 }
 
 impl KirlStdLib {
-    pub fn functions(&self) -> impl IntoIterator<Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
+    pub fn functions(&self) -> impl IntoIterator<Item=(Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
         KirlStdLibFunctions { functions: Vec::new(), maps: vec![&self.0] }
     }
 
-    pub fn static_values(&self) -> impl IntoIterator<Item = (Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)> + '_ {
+    pub fn static_values(&self) -> impl IntoIterator<Item=(Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)> + '_ {
         KirlStdLibStaticValues { values: Vec::new(), maps: vec![&self.0] }
     }
 }
@@ -220,6 +220,13 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
                         Vec::new()
                     }
                     FunctionOrChildren::from_function(create_list::new())
+                },
+                fill: {
+                    #[kirl_function(for<T> (T, Number)->[T] )]
+                    fn fill_list(item: Arc<RwLock<dyn KirlVMValueCloneable>>, count: Decimal128) -> Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> {
+                        vec![item; usize::try_from(dec::Decimal::<15>::from(count)).unwrap()]
+                    }
+                    FunctionOrChildren::from_function(fill_list::new())
                 },
                 len: {
                     #[kirl_function(for<T> ([T])->Number )]
