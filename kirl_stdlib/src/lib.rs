@@ -1,5 +1,5 @@
 use kirl_common::dec::Decimal128;
-use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValueCloneable};
+use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValue, KirlVMValueLock};
 use kirl_common::typing::HIRType;
 use kirl_common_macro::kirl_function;
 use once_cell::sync::Lazy;
@@ -13,7 +13,7 @@ use kirl_semantic_analyzer::name_resolver::KirlNameResolver;
 
 pub enum FunctionOrChildren {
     Function(Arc<Mutex<dyn KirlRustFunction>>, Uuid, HIRType),
-    StaticValue(Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>> + Send + Sync>, Uuid, HIRType),
+    StaticValue(Arc<dyn Fn() -> Arc<dyn KirlVMValueLock> + Send + Sync>, Uuid, HIRType),
     Children(HashMap<String, Vec<FunctionOrChildren>>),
 }
 
@@ -32,7 +32,7 @@ impl FunctionOrChildren {
         FunctionOrChildren::Function(Arc::new(Mutex::new(f)), Uuid::new_v4(), F::static_type().into_owned())
     }
 
-    fn static_value<F: 'static + Fn() -> Value + Send + Sync, Value: KirlVMValueCloneable>(f: F) -> Self {
+    fn static_value<F: 'static + Fn() -> Value + Send + Sync, Value: KirlVMValue>(f: F) -> Self {
         FunctionOrChildren::StaticValue(Arc::new(move || Arc::new(RwLock::new(f()))), Uuid::new_v4(), Value::static_type().into_owned().into())
     }
 }
@@ -101,12 +101,12 @@ impl<'a> Iterator for KirlStdLibFunctions<'a> {
 }
 
 struct KirlStdLibStaticValues<'a> {
-    values: Vec<(Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)>,
+    values: Vec<(Uuid, Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>)>,
     maps: Vec<&'a HashMap<String, Vec<FunctionOrChildren>>>,
 }
 
 impl<'a> Iterator for KirlStdLibStaticValues<'a> {
-    type Item = (Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>);
+    type Item = (Uuid, Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>);
 
     fn next(&mut self) -> Option<Self::Item> {
         let KirlStdLibStaticValues { values, maps } = self;
@@ -117,7 +117,7 @@ impl<'a> Iterator for KirlStdLibStaticValues<'a> {
             if let Some(map) = maps.pop() {
                 for children in map.values().flatten() {
                     match children {
-                        FunctionOrChildren::StaticValue(value, id, _) => values.push((*id, Arc::clone(value) as Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)),
+                        FunctionOrChildren::StaticValue(value, id, _) => values.push((*id, Arc::clone(value) as Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>)),
                         FunctionOrChildren::Children(children) => maps.push(children),
                         FunctionOrChildren::Function(_, _, _) => {}
                     }
@@ -130,11 +130,11 @@ impl<'a> Iterator for KirlStdLibStaticValues<'a> {
 }
 
 impl KirlStdLib {
-    pub fn functions(&self) -> impl IntoIterator<Item=(Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
+    pub fn functions(&self) -> impl IntoIterator<Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
         KirlStdLibFunctions { functions: Vec::new(), maps: vec![&self.0] }
     }
 
-    pub fn static_values(&self) -> impl IntoIterator<Item=(Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)> + '_ {
+    pub fn static_values(&self) -> impl IntoIterator<Item = (Uuid, Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>)> + '_ {
         KirlStdLibStaticValues { values: Vec::new(), maps: vec![&self.0] }
     }
 }
@@ -216,42 +216,42 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
             list: map! {
                 new: {
                     #[kirl_function(for<T> ()->[T] )]
-                    fn create_list() -> Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> {
+                    fn create_list() -> Vec<Arc<dyn KirlVMValueLock>> {
                         Vec::new()
                     }
                     FunctionOrChildren::from_function(create_list::new())
                 },
                 fill: {
                     #[kirl_function(for<T> (T, Number)->[T] )]
-                    fn fill_list(item: Arc<RwLock<dyn KirlVMValueCloneable>>, count: Decimal128) -> Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> {
+                    fn fill_list(item: Arc<dyn KirlVMValueLock>, count: Decimal128) -> Vec<Arc<dyn KirlVMValueLock>> {
                         vec![item; usize::try_from(dec::Decimal::<15>::from(count)).unwrap()]
                     }
                     FunctionOrChildren::from_function(fill_list::new())
                 },
                 len: {
                     #[kirl_function(for<T> ([T])->Number )]
-                    fn list_length(list: Arc<RwLock<Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>>>) -> Decimal128 {
+                    fn list_length(list: Arc<RwLock<Vec<Arc<dyn KirlVMValueLock>>>>) -> Decimal128 {
                         (list.read().unwrap().len() as u64).into()
                     }
                     FunctionOrChildren::from_function(list_length::new())
                 },
                 push: {
                     #[kirl_function(for<T> ([T], T)->() )]
-                    fn list_push(list: Arc<RwLock<Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>>>, item: Arc<RwLock<dyn KirlVMValueCloneable>>) {
+                    fn list_push(list: Arc<RwLock<Vec<Arc<dyn KirlVMValueLock>>>>, item: Arc<dyn KirlVMValueLock>) {
                         list.write().unwrap().push(item);
                     }
                     FunctionOrChildren::from_function(list_push::new())
                 },
                 _get_item: {
                     #[kirl_function(for<T> ([T], Number)->T )]
-                    fn list_get_item(list: Arc<RwLock<Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>>>, index: Decimal128) -> Arc<RwLock<dyn KirlVMValueCloneable>> {
+                    fn list_get_item(list: Arc<RwLock<Vec<Arc<dyn KirlVMValueLock>>>>, index: Decimal128) -> Arc<dyn KirlVMValueLock> {
                         Arc::clone(&list.read().unwrap()[usize::try_from(dec::Decimal::<15>::from(index)).unwrap()])
                     }
                     FunctionOrChildren::from_function(list_get_item::new())
                 },
                 _set_item: {
                     #[kirl_function(for<T> ([T], Number, T)->())]
-                    fn list_set_item(list: Arc<RwLock<Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>>>, index: Decimal128, item: Arc<RwLock<dyn KirlVMValueCloneable>>) {
+                    fn list_set_item(list: Arc<RwLock<Vec<Arc<dyn KirlVMValueLock>>>>, index: Decimal128, item: Arc<dyn KirlVMValueLock>) {
                         list.write().unwrap()[usize::try_from(dec::Decimal::<15>::from(index)).unwrap()] = item;
                     }
                     FunctionOrChildren::from_function(list_set_item::new())

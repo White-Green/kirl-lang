@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use kirl_common::dec::{Context, Decimal128};
 use kirl_common::typing::LIRType;
 
-use kirl_common::interface::{KirlRustFunction, KirlVMValueCloneable};
+use kirl_common::interface::{KirlRustFunction, KirlVMValueLock};
 use uuid::Uuid;
 
 use crate::lir::{LIRInstruction, LIRStatement};
@@ -71,7 +71,7 @@ impl KirlByteCode {
     }
 }
 
-pub(crate) type StaticValueGenerator = Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>;
+pub(crate) type StaticValueGenerator = Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>;
 
 pub struct KirlVMExecutable {
     pub(crate) bytecodes: Vec<KirlByteCode>,
@@ -84,7 +84,7 @@ pub struct KirlVMExecutable {
 }
 
 impl KirlVMExecutable {
-    pub fn new(functions: impl IntoIterator<Item = (Uuid, Vec<LIRStatement>)>, static_value_generators: impl IntoIterator<Item = (Uuid, Arc<dyn Fn() -> Arc<RwLock<dyn KirlVMValueCloneable>>>)>, rust_functions: impl IntoIterator<Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>)>, main_function: Uuid) -> Self {
+    pub fn new(functions: impl IntoIterator<Item = (Uuid, Vec<LIRStatement>)>, static_value_generators: impl IntoIterator<Item = (Uuid, Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>)>, rust_functions: impl IntoIterator<Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>)>, main_function: Uuid) -> Self {
         let (mut static_value_generators, static_value_index): (Vec<_>, HashMap<_, _>) = static_value_generators.into_iter().enumerate().map(|(i, (id, generator))| (generator, (id, u32::try_from(i).unwrap()))).unzip();
         let (rust_functions, rust_function_index): (Vec<_>, HashMap<_, _>) = rust_functions.into_iter().enumerate().map(|(i, (id, function))| (function, (id, u32::try_from(i).unwrap()))).unzip();
         let mut bytecodes = Vec::new();
@@ -137,13 +137,13 @@ fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map:
         match instruction {
             LIRInstruction::LoadImmediateString(value) => {
                 result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, static_value_generators.len() as u32));
-                let value = Arc::new(RwLock::new(value)) as Arc<RwLock<dyn KirlVMValueCloneable>>;
+                let value = Arc::new(RwLock::new(value)) as Arc<dyn KirlVMValueLock>;
                 static_value_generators.push(Arc::new(move || Arc::clone(&value)));
             }
             LIRInstruction::LoadImmediateNumber(value) => {
                 result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, static_value_generators.len() as u32));
                 let value = Context::<Decimal128>::default().reduce(value);
-                let value = Arc::new(RwLock::new(value)) as Arc<RwLock<dyn KirlVMValueCloneable>>;
+                let value = Arc::new(RwLock::new(value)) as Arc<dyn KirlVMValueLock>;
                 static_value_generators.push(Arc::new(move || Arc::clone(&value)));
             }
             LIRInstruction::LoadNamedValue(id) => result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, *static_value_index.get(&id).expect("TODO:"))),

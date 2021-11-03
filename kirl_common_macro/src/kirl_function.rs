@@ -353,9 +353,12 @@ fn get_param_type(ty: &Type) -> ParamType {
             false
         }
     }
-    match unwrap_type(ty, &["std", "sync", "Arc"]).and_then(|ty| unwrap_type(ty, &["std", "sync", "RwLock"])).map(unwrap_paren) {
-        Some(Type::TraitObject(TypeTraitObject { bounds, .. })) if bounds.iter().any(|tr| is_a(tr, &["kirl_common", "interface", "KirlVMValueCloneable"])) => ParamType::NonCast,
-        Some(ty) => ParamType::Cast(ty),
+    match unwrap_type(ty, &["std", "sync", "Arc"]).map(unwrap_paren) {
+        Some(Type::TraitObject(TypeTraitObject { bounds, .. })) if bounds.iter().any(|tr| is_a(tr, &["kirl_common", "interface", "KirlVMValueLock"])) => ParamType::NonCast,
+        Some(ty) => match unwrap_type(ty, &["std", "sync", "RwLock"]) {
+            Some(ty) => ParamType::Cast(ty),
+            None => ParamType::Owned(ty),
+        },
         None => ParamType::Owned(ty),
     }
 }
@@ -404,9 +407,9 @@ pub(crate) fn kirl_function_inner(args: TokenStream, input: TokenStream) -> Toke
             let name = Ident::new(&format!("param{}", i), Span::call_site());
             match ty {
                 ParamType::NonCast => quote! { #name },
-                ParamType::Cast(ty) => quote! { <#ty as kirl_common::interface::InterchangeKirlVMValue>::try_from_kirl_value(#name).unwrap_or_else(|value|panic!("expected type {:?} but found {:?}.", std::any::type_name::<#ty>(), value.read().unwrap().type_name())) },
+                ParamType::Cast(ty) => quote! { <#ty as kirl_common::interface::InterchangeKirlVMValue>::try_from_kirl_value(#name).unwrap_or_else(|value|panic!("expected type {:?} but found {:?}.", std::any::type_name::<#ty>(), value.type_name())) },
                 ParamType::Owned(ty) => quote! { {
-                    let value = <#ty as kirl_common::interface::InterchangeKirlVMValue>::try_from_kirl_value(#name).unwrap_or_else(|value|panic!("expected type {:?} but found {:?}.", std::any::type_name::<#ty>(), value.read().unwrap().type_name()));
+                    let value = <#ty as kirl_common::interface::InterchangeKirlVMValue>::try_from_kirl_value(#name).unwrap_or_else(|value|panic!("expected type {:?} but found {:?}.", std::any::type_name::<#ty>(), value.type_name()));
                     std::sync::Arc::try_unwrap(value).map(|lock| lock.into_inner().expect("")).unwrap_or_else(|arc| arc.read().expect("").clone())
                 } },
             }
@@ -424,7 +427,7 @@ pub(crate) fn kirl_function_inner(args: TokenStream, input: TokenStream) -> Toke
             } else {
                 match get_param_type(ty) {
                     ParamType::NonCast => quote! { Ok(result) },
-                    ParamType::Cast(_) => quote! { Ok(result as std::sync::Arc<std::sync::RwLock<dyn kirl_common::interface::KirlVMValueCloneable>>) },
+                    ParamType::Cast(_) => quote! { Ok(result as std::sync::Arc<dyn kirl_common::interface::KirlVMValueLock>) },
                     ParamType::Owned(ty) => quote! { Ok(<#ty as kirl_common::interface::InterchangeKirlVMValue>::into_kirl_value(result)) },
                 }
             }
@@ -452,8 +455,8 @@ pub(crate) fn kirl_function_inner(args: TokenStream, input: TokenStream) -> Toke
             fn argument_count(&self) -> usize {
                 #argument_count
             }
-            fn call(&mut self, args: Vec<std::sync::Arc<std::sync::RwLock<dyn kirl_common::interface::KirlVMValueCloneable>>>) -> Result<std::sync::Arc<std::sync::RwLock<dyn kirl_common::interface::KirlVMValueCloneable>>, Box<dyn std::error::Error>> {
-                if let Ok([#(#param_names),*]) = <[std::sync::Arc<std::sync::RwLock<dyn kirl_common::interface::KirlVMValueCloneable>>; #argument_count]>::try_from(args) {
+            fn call(&mut self, args: Vec<std::sync::Arc<dyn kirl_common::interface::KirlVMValueLock>>) -> Result<std::sync::Arc<dyn kirl_common::interface::KirlVMValueLock>, Box<dyn std::error::Error>> {
+                if let Ok([#(#param_names),*]) = <[std::sync::Arc<dyn kirl_common::interface::KirlVMValueLock>; #argument_count]>::try_from(args) {
                     let result = #function_name::<#(#params_ref),*>(#(#arguments),*);
                     #output_map
                 } else {

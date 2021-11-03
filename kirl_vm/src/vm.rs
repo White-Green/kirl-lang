@@ -1,4 +1,4 @@
-use kirl_common::interface::{InterchangeKirlVMValue, KirlVMValueCloneable};
+use kirl_common::interface::{InterchangeKirlVMValue, KirlVMValueLock};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -20,7 +20,7 @@ pub fn exec(
     }: &KirlVMExecutable,
 ) {
     let mut local_stack = Vec::new();
-    let mut global_stack: Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> = Vec::new();
+    let mut global_stack: Vec<Arc<dyn KirlVMValueLock>> = Vec::new();
     let mut global_stack_offset = 0usize;
     let mut global_stack_offset_stack = Vec::new();
     let mut program_counter_stack = Vec::new();
@@ -56,7 +56,7 @@ pub fn exec(
             KirlByteCodeOpcode::JumpIfHasType => {
                 let ty = &types[additional_operand.pop().expect("") as usize];
                 let condition = local_stack.last().expect("");
-                if condition.read().unwrap().get_type().is_a(ty) {
+                if condition.get_type().is_a(ty) {
                     let operand = instruction.operand_signed();
                     program_counter = ((program_counter as isize) + (operand as isize)) as usize;
                     continue;
@@ -97,7 +97,7 @@ pub fn exec(
             KirlByteCodeOpcode::AccessTupleItem => {
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
-                let value = Box::<[Arc<RwLock<dyn KirlVMValueCloneable>>]>::try_from_kirl_value(value).expect("");
+                let value = Box::<[Arc<dyn KirlVMValueLock>]>::try_from_kirl_value(value).expect("");
                 let value = value.read().expect("");
                 let value = Arc::clone(&value[operand as usize]);
                 local_stack.push(value);
@@ -105,7 +105,7 @@ pub fn exec(
             KirlByteCodeOpcode::AccessMember => {
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
-                let value = HashMap::<String, Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(value).expect("");
+                let value = HashMap::<String, Arc<dyn KirlVMValueLock>>::try_from_kirl_value(value).expect("");
                 let value = value.read().expect("");
                 let member = value.get(&member_names[operand as usize]).expect("");
                 local_stack.push(Arc::clone(member));
@@ -114,14 +114,14 @@ pub fn exec(
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
                 let dest = local_stack.pop().expect("");
-                let dest = Box::<[Arc<RwLock<dyn KirlVMValueCloneable>>]>::try_from_kirl_value(dest).expect("");
+                let dest = Box::<[Arc<dyn KirlVMValueLock>]>::try_from_kirl_value(dest).expect("");
                 dest.write().expect("")[operand as usize] = value;
             }
             KirlByteCodeOpcode::AssignMember => {
                 let operand = instruction.operand();
                 let value = local_stack.pop().expect("");
                 let dest = local_stack.pop().expect("");
-                let dest = HashMap::<String, Arc<RwLock<dyn KirlVMValueCloneable>>>::try_from_kirl_value(dest).expect("");
+                let dest = HashMap::<String, Arc<dyn KirlVMValueLock>>::try_from_kirl_value(dest).expect("");
                 dest.write().expect("").insert(member_names[operand as usize].clone(), value);
             }
             KirlByteCodeOpcode::ConstructStruct => {

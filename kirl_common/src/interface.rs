@@ -14,7 +14,7 @@ pub trait KirlRustFunction: Send + Sync {
     where
         Self: Sized;
     fn argument_count(&self) -> usize;
-    fn call(&mut self, args: Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>) -> Result<Arc<RwLock<dyn KirlVMValueCloneable>>, Box<dyn Error>>;
+    fn call(&mut self, args: Vec<Arc<dyn KirlVMValueLock>>) -> Result<Arc<dyn KirlVMValueLock>, Box<dyn Error>>;
 }
 
 pub struct FunctionWrapper<Args, Result, F>(F, PhantomData<(Args, Result)>);
@@ -48,11 +48,11 @@ macro_rules! impl_fn {
                 Cow::Owned(LIRType::Function { arguments: vec![$($t::static_type().into_owned()),*], result: Box::new(R::static_type().into_owned()) }.into())
             }
             fn argument_count(&self) -> usize { count!($($t),*) }
-            fn call(&mut self, args: Vec<Arc<RwLock<dyn KirlVMValueCloneable>>>) -> Result<Arc<RwLock<dyn KirlVMValueCloneable>>, Box<dyn Error>> {
+            fn call(&mut self, args: Vec<Arc<dyn KirlVMValueLock>>) -> Result<Arc<dyn KirlVMValueLock>, Box<dyn Error>> {
                 #[allow(non_snake_case)]
                 if let Ok([$($t),*]) = <[_;count!($($t),*)] as std::convert::TryFrom<_>>::try_from(args) {
                     self.0($({
-                        let value_ref = $t::try_from_kirl_value($t).unwrap_or_else(|value:Arc<RwLock<dyn KirlVMValueCloneable>>|panic!("expected type {:?} but found {:?}.", std::any::type_name::<$t>(), value.read().unwrap().type_name()));
+                        let value_ref = $t::try_from_kirl_value($t).unwrap_or_else(|value:Arc<dyn KirlVMValueLock>|panic!("expected type {:?} but found {:?}.", std::any::type_name::<$t>(), value.type_name()));
                         Arc::try_unwrap(value_ref).map(|lock| lock.into_inner().expect("")).unwrap_or_else(|arc| arc.read().expect("").clone())
                     }),*).map(|result|result.into_kirl_value()).map_err(|err|Box::new(err) as Box<dyn Error>)
                 } else { unreachable!() }
@@ -61,9 +61,9 @@ macro_rules! impl_fn {
     }
 }
 
-fn downcast<U: Sized + 'static>(value: Arc<RwLock<dyn KirlVMValueCloneable>>) -> Result<Arc<RwLock<U>>, Arc<RwLock<dyn KirlVMValueCloneable>>> {
-    let id = <dyn KirlVMValueCloneable>::type_id(&*value.read().unwrap());
-    if id == TypeId::of::<U>() {
+fn downcast<U: Sized + 'static>(value: Arc<dyn KirlVMValueLock>) -> Result<Arc<RwLock<U>>, Arc<dyn KirlVMValueLock>> {
+    let id = <dyn KirlVMValueLock>::type_id(&*value);
+    if id == TypeId::of::<RwLock<U>>() {
         unsafe {
             let raw = Arc::into_raw(value);
             Ok(Arc::from_raw(raw as *const RwLock<U>))
@@ -102,11 +102,11 @@ macro_rules! get_type {
 pub trait InterchangeKirlVMValue: Sized {
     fn static_type() -> Cow<'static, LIRType>;
     fn get_type(&self) -> Cow<LIRType>;
-    fn into_kirl_value(self) -> Arc<RwLock<dyn KirlVMValueCloneable>>;
-    fn try_from_kirl_value(value: Arc<RwLock<dyn KirlVMValueCloneable>>) -> Result<Arc<RwLock<Self>>, Arc<RwLock<dyn KirlVMValueCloneable>>>;
+    fn into_kirl_value(self) -> Arc<dyn KirlVMValueLock>;
+    fn try_from_kirl_value(value: Arc<dyn KirlVMValueLock>) -> Result<Arc<RwLock<Self>>, Arc<dyn KirlVMValueLock>>;
 }
 
-impl<T: Sized + KirlVMValueCloneable> InterchangeKirlVMValue for T {
+impl<T: Sized + KirlVMValue> InterchangeKirlVMValue for T {
     fn static_type() -> Cow<'static, LIRType> {
         Self::static_type()
     }
@@ -115,11 +115,11 @@ impl<T: Sized + KirlVMValueCloneable> InterchangeKirlVMValue for T {
         KirlVMValue::get_type(self)
     }
 
-    fn into_kirl_value(self) -> Arc<RwLock<dyn KirlVMValueCloneable>> {
+    fn into_kirl_value(self) -> Arc<dyn KirlVMValueLock> {
         Arc::new(RwLock::new(self))
     }
 
-    fn try_from_kirl_value(value: Arc<RwLock<dyn KirlVMValueCloneable>>) -> Result<Arc<RwLock<Self>>, Arc<RwLock<dyn KirlVMValueCloneable>>> {
+    fn try_from_kirl_value(value: Arc<dyn KirlVMValueLock>) -> Result<Arc<RwLock<Self>>, Arc<dyn KirlVMValueLock>> {
         downcast(value)
     }
 }
@@ -131,6 +131,30 @@ pub trait KirlVMValue: Any + Debug + Send + Sync + 'static {
     fn get_type(&self) -> Cow<LIRType>;
     fn type_name(&self) -> &'static str {
         std::any::type_name::<Self>()
+    }
+}
+
+mod private {
+    use super::KirlVMValue;
+    use std::sync::RwLock;
+
+    pub trait KirlVMValueLockPrivate {}
+
+    impl<V: KirlVMValue> KirlVMValueLockPrivate for RwLock<V> {}
+}
+
+pub trait KirlVMValueLock: private::KirlVMValueLockPrivate + Any + Debug + Send + Sync + 'static {
+    fn get_type(&self) -> LIRType;
+    fn type_name(&self) -> &'static str;
+}
+
+impl<V: KirlVMValue> KirlVMValueLock for RwLock<V> {
+    fn get_type(&self) -> LIRType {
+        self.read().unwrap().get_type().into_owned()
+    }
+
+    fn type_name(&self) -> &'static str {
+        self.read().unwrap().type_name()
     }
 }
 
@@ -164,12 +188,12 @@ impl InterchangeKirlVMValue for () {
     fn get_type(&self) -> Cow<LIRType> {
         Self::static_type()
     }
-    fn into_kirl_value(self) -> Arc<RwLock<dyn KirlVMValueCloneable>> {
-        let value = Vec::<Arc<RwLock<dyn KirlVMValueCloneable>>>::new().into_boxed_slice();
+    fn into_kirl_value(self) -> Arc<dyn KirlVMValueLock> {
+        let value = Vec::<Arc<dyn KirlVMValueLock>>::new().into_boxed_slice();
         Arc::new(RwLock::new(value))
     }
-    fn try_from_kirl_value(value: Arc<RwLock<dyn KirlVMValueCloneable>>) -> Result<Arc<RwLock<Self>>, Arc<RwLock<dyn KirlVMValueCloneable>>> {
-        <Box<[Arc<RwLock<dyn KirlVMValueCloneable>>]>>::try_from_kirl_value(value)?;
+    fn try_from_kirl_value(value: Arc<dyn KirlVMValueLock>) -> Result<Arc<RwLock<Self>>, Arc<dyn KirlVMValueLock>> {
+        <Box<[Arc<dyn KirlVMValueLock>]>>::try_from_kirl_value(value)?;
         Ok(Arc::new(RwLock::new(())))
     }
 }
@@ -196,7 +220,7 @@ impl KirlVMValue for bool {
     }
 }
 
-impl KirlVMValue for Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> {
+impl KirlVMValue for Vec<Arc<dyn KirlVMValueLock>> {
     fn static_type() -> Cow<'static, LIRType>
     where
         Self: Sized,
@@ -206,11 +230,11 @@ impl KirlVMValue for Vec<Arc<RwLock<dyn KirlVMValueCloneable>>> {
     }
 
     fn get_type(&self) -> Cow<LIRType> {
-        Cow::Owned(LIRType::Array(Box::new(LIRType::Or(self.iter().map(|value| value.read().expect("").get_type().into_owned()).collect()).into_normalized())))
+        Cow::Owned(LIRType::Array(Box::new(LIRType::Or(self.iter().map(|value| value.get_type()).collect()).into_normalized())))
     }
 }
 
-impl KirlVMValue for Box<[Arc<RwLock<dyn KirlVMValueCloneable>>]> {
+impl KirlVMValue for Box<[Arc<dyn KirlVMValueLock>]> {
     fn static_type() -> Cow<'static, LIRType>
     where
         Self: Sized,
@@ -220,11 +244,11 @@ impl KirlVMValue for Box<[Arc<RwLock<dyn KirlVMValueCloneable>>]> {
     }
 
     fn get_type(&self) -> Cow<LIRType> {
-        Cow::Owned(LIRType::Tuple(self.iter().map(|value| value.read().unwrap().get_type().into_owned()).collect()))
+        Cow::Owned(LIRType::Tuple(self.iter().map(|value| value.get_type()).collect()))
     }
 }
 
-impl KirlVMValue for HashMap<String, Arc<RwLock<dyn KirlVMValueCloneable>>> {
+impl KirlVMValue for HashMap<String, Arc<dyn KirlVMValueLock>> {
     fn static_type() -> Cow<'static, LIRType>
     where
         Self: Sized,
@@ -234,16 +258,16 @@ impl KirlVMValue for HashMap<String, Arc<RwLock<dyn KirlVMValueCloneable>>> {
     }
 
     fn get_type(&self) -> Cow<LIRType> {
-        Cow::Owned(LIRType::AnonymousStruct(self.iter().map(|(key, value)| (key.clone(), value.read().expect("").get_type().into_owned())).collect()).into_normalized())
+        Cow::Owned(LIRType::AnonymousStruct(self.iter().map(|(key, value)| (key.clone(), value.get_type())).collect()).into_normalized())
     }
 }
 
-pub trait KirlVMValueCloneable: KirlVMValue {
-    fn kirl_clone(&self) -> Box<dyn KirlVMValueCloneable>;
-}
-
-impl<T: KirlVMValue + Clone> KirlVMValueCloneable for T {
-    fn kirl_clone(&self) -> Box<dyn KirlVMValueCloneable> {
-        Box::new(self.clone())
-    }
-}
+// pub trait KirlVMValueCloneable: KirlVMValue {
+//     fn kirl_clone(&self) -> Box<dyn KirlVMValueCloneable>;
+// }
+//
+// impl<T: KirlVMValue + Clone> KirlVMValueCloneable for T {
+//     fn kirl_clone(&self) -> Box<dyn KirlVMValueCloneable> {
+//         Box::new(self.clone())
+//     }
+// }
