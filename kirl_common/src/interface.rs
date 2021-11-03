@@ -261,13 +261,3 @@ impl KirlVMValue for HashMap<String, Arc<dyn KirlVMValueLock>> {
         Cow::Owned(LIRType::AnonymousStruct(self.iter().map(|(key, value)| (key.clone(), value.get_type())).collect()).into_normalized())
     }
 }
-
-// pub trait KirlVMValueCloneable: KirlVMValue {
-//     fn kirl_clone(&self) -> Box<dyn KirlVMValueCloneable>;
-// }
-//
-// impl<T: KirlVMValue + Clone> KirlVMValueCloneable for T {
-//     fn kirl_clone(&self) -> Box<dyn KirlVMValueCloneable> {
-//         Box::new(self.clone())
-//     }
-// }
