@@ -277,7 +277,7 @@ fn unwrap_paren(ty: &Type) -> &Type {
 
 fn unwrap_result(ty: &Type) -> Option<(&Type, &Type)> {
     if let Type::Path(TypePath { path: Path { segments, .. }, .. }) = unwrap_paren(ty) {
-        if segments.len() <= 3 && segments.iter().rev().zip(["std", "result", "Result"].iter().rev()).any(|(seg, name)| seg.ident != name) || segments.len() <= 2 && segments.iter().rev().zip(["std", "Result"].iter().rev()).any(|(seg, name)| seg.ident != name) {
+        if segments.len() <= 3 && segments.iter().rev().zip(["std", "result", "Result"].iter().rev()).all(|(seg, name)| seg.ident == name) || segments.len() <= 2 && segments.iter().rev().zip(["std", "Result"].iter().rev()).all(|(seg, name)| seg.ident == name) {
             if segments.iter().rev().skip(1).any(|seg| !matches!(seg.arguments, PathArguments::None)) {
                 return None;
             }
@@ -422,7 +422,7 @@ pub(crate) fn kirl_function_inner(args: TokenStream, input: TokenStream) -> Toke
                 match get_param_type(ty_ok) {
                     ParamType::NonCast => quote! { result.map_err(Into::into) },
                     ParamType::Cast(_) => quote! { result.map(|result| result as std::sync::Arc<std::sync::RwLock<dyn kirl_common::interface::KirlVMValueCloneable>>).map_err(Into::into) },
-                    ParamType::Owned(ty) => quote! { result.map(<#ty as kirl_common::interface::InterchangeKirlVMValue>::into_kirl_value) },
+                    ParamType::Owned(ty) => quote! { result.map(<#ty as kirl_common::interface::InterchangeKirlVMValue>::into_kirl_value).map_err(Into::into) },
                 }
             } else {
                 match get_param_type(ty) {
