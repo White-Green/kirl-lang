@@ -143,9 +143,11 @@ impl Parse for TypeSyntax {
             }
         } else if input.peek(token::Bracket) {
             let item;
+            #[allow(clippy::eval_order_dependence)]
             Ok(TypeSyntax::Array { _bracket: bracketed!(item in input), item: Box::new(item.parse()?) })
         } else if input.peek(Token![#]) {
             let members;
+            #[allow(clippy::eval_order_dependence)]
             Ok(TypeSyntax::AnonymousStruct {
                 _sharp: input.parse()?,
                 _brace: braced!(members in input),
