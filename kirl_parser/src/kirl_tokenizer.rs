@@ -220,7 +220,7 @@ tokenizer! {
         "\\.[0-9][1-9]*(th|st|nd|rd)": |s, v| Ok(array![Token::Dot(v.first().unwrap().0..v[1].0), Token::TupleIndex((v[1].0..v.last().unwrap().0.next(), parse_tuple_index(&s[1..])))]);
         "[0-9][1-9]*(th|st|nd|rd)": |s, v| Ok(array![Token::TupleIndex((v.first().unwrap().0..v.last().unwrap().0.next(), parse_tuple_index(s)))]);
         "[a-zA-Z_][a-zA-Z0-9_]*": |s, v| Ok(array![Token::Identifier((v.first().unwrap().0..v.last().unwrap().0.next(), s.to_string()))]);
-        "\"(\\\\(n|t|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\}|\\\\|\")|[^\\\\\"\n])*\"": |s, v| {
+        "\"(\\\\(n|t|x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\}|\\\\|\")|[^\\\\\"])*\"": |s, v| {
                 parse_string_literal(s)
                     .ok_or_else(|| TokenizeError::StringParseError {
                         raw: s.to_string(),
@@ -303,6 +303,7 @@ fn parse_string_literal(s: &str) -> Option<String> {
             continue;
         }
         match iter.next() {
+            Some('\n') => {}
             Some('n') => result.push('\n'),
             Some('t') => result.push('\t'),
             Some('\\') => result.push('\\'),
@@ -482,6 +483,7 @@ test2 */
         assert_eq!(tokenize("_abc_123"), vec![Ok(array![Token::Identifier((new(0, 0)..new(0, 8), "_abc_123".to_string()))])]);
         assert_ne!(tokenize("0_abc_123"), vec![Ok(array![Token::Identifier((new(0, 0)..new(0, 9), "0_abc_123".to_string()))])]);
 
+        assert_eq!(tokenize("\"\n\""), vec![Ok(array![Token::StringImmediate((new(0, 0)..new(1, 1), "\n".to_string()))])]);
         assert_eq!(tokenize(r##""abcd1234_*`{}-^=~|<>?_,./""##), vec![Ok(array![Token::StringImmediate((new(0, 0)..new(0, 27), "abcd1234_*`{}-^=~|<>?_,./".to_string()))])]);
         assert_eq!(tokenize(r#""\\ \" \n \t \x41 \u{beef}""#), vec![Ok(array![Token::StringImmediate((new(0, 0)..new(0, 27), "\\ \" \n \t \x41 \u{beef}".to_string()))])]);
 
