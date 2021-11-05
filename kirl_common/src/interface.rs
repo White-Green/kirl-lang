@@ -158,7 +158,7 @@ impl<V: KirlVMValue> KirlVMValueLock for RwLock<V> {
     }
 }
 
-impl KirlVMValue for String {
+impl KirlVMValue for Box<str> {
     fn static_type() -> Cow<'static, LIRType> {
         static TYPE: Lazy<LIRType> = Lazy::new(|| get_type!((String)).into_normalized());
         Cow::Borrowed(&TYPE)

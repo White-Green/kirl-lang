@@ -40,7 +40,7 @@ pub fn exec(
             KirlByteCodeOpcode::Store => {
                 let operand = instruction.operand() as usize + global_stack_offset;
                 if global_stack.len() <= operand {
-                    global_stack.resize_with(operand + 1, || Arc::new(RwLock::new(String::new())));
+                    global_stack.resize_with(operand + 1, || Arc::new(RwLock::new(Vec::new().into_boxed_slice())));
                 }
                 global_stack[operand] = local_stack.pop().expect("");
             }
@@ -129,9 +129,9 @@ pub fn exec(
                 let mut result = HashMap::with_capacity(operand as usize);
                 for _ in 0..operand {
                     let name = local_stack.pop().expect("");
-                    let name = unwrap(String::try_from_kirl_value(name).expect(""));
+                    let name = unwrap(<Box<str>>::try_from_kirl_value(name).expect(""));
                     let value = local_stack.pop().expect("");
-                    result.insert(name, value);
+                    result.insert(name.into_string(), value);
                 }
                 local_stack.push(Arc::new(RwLock::new(result)));
             }

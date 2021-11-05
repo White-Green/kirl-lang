@@ -178,7 +178,7 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
         io: map! {
             print: FunctionOrChildren::from_function({
                 #[kirl_function((String)->())]
-                fn string_print(s: Arc<RwLock<String>>) {
+                fn string_print(s: Arc<RwLock<Box<str>>>) {
                     print!("{}", s.read().unwrap());
                 }
                 string_print::new()
@@ -187,7 +187,7 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
             print: FunctionOrChildren::from_function(FunctionWrapper::from(|s: bool| Ok::<_, NoneError>(print!("{}", s)))),
             println: FunctionOrChildren::from_function({
                 #[kirl_function((String)->())]
-                fn string_println(s: Arc<RwLock<String>>){
+                fn string_println(s: Arc<RwLock<Box<str>>>){
                     println!("{}", s.read().unwrap());
                 }
                 string_println::new()
@@ -197,19 +197,19 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
             stdin: map! {
                 read_line: FunctionOrChildren::from_function({
                     #[kirl_function(()->String)]
-                    fn stdin_read_line() -> Result<String, io::Error> {
+                    fn stdin_read_line() -> Result<Box<str>, io::Error> {
                         let mut result = String::new();
                         io::stdin().read_line(&mut result)?;
-                        Ok(result)
+                        Ok(result.into_boxed_str())
                     }
                     stdin_read_line::new()
                 }),
                 read_all: FunctionOrChildren::from_function({
                     #[kirl_function(()->String)]
-                    fn stdin_read_all() -> Result<String, io::Error> {
+                    fn stdin_read_all() -> Result<Box<str>, io::Error> {
                         let mut result = String::new();
                         io::stdin().read_to_string(&mut result)?;
-                        Ok(result)
+                        Ok(result.into_boxed_str())
                     }
                     stdin_read_all::new()
                 }) ,
@@ -237,14 +237,14 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
         string: map! {
             _eq: FunctionOrChildren::from_function({
                 #[kirl_function((String, String)->Bool)]
-                fn str_eq(a: Arc<RwLock<String>>, b: Arc<RwLock<String>>) -> bool {
+                fn str_eq(a: Arc<RwLock<Box<str>>>, b: Arc<RwLock<Box<str>>>) -> bool {
                     str::eq(&**a.read().unwrap(), &**b.read().unwrap())
                 }
                 str_eq::new()
             }),
             _gt: FunctionOrChildren::from_function({
                 #[kirl_function((String, String)->Bool)]
-                fn str_gt(a: Arc<RwLock<String>>, b: Arc<RwLock<String>>) -> bool {
+                fn str_gt(a: Arc<RwLock<Box<str>>>, b: Arc<RwLock<Box<str>>>) -> bool {
                     str::gt(&**a.read().unwrap(), &**b.read().unwrap())
                 }
                 str_gt::new()
