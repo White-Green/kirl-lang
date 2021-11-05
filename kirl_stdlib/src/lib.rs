@@ -3,6 +3,7 @@ use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValue, Kir
 use kirl_common::typing::HIRType;
 use kirl_common_macro::kirl_function;
 use once_cell::sync::Lazy;
+use regex::Regex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -249,6 +250,24 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
                 }
                 str_gt::new()
             }),
+            regex: map! {
+                is_match: FunctionOrChildren::from_function({
+                    #[kirl_function((String, String)->Bool)]
+                    fn is_match(input: Arc<RwLock<Box<str>>>, pattern: Arc<RwLock<Box<str>>>)->Result<bool, regex::Error>{
+                        let regex = Regex::new(&pattern.read().unwrap())?;
+                        Ok(regex.is_match(&input.read().unwrap()))
+                    }
+                    is_match::new()
+                }),
+                replace: FunctionOrChildren::from_function({
+                    #[kirl_function((String, String, String)->String)]
+                    fn replace(input: Arc<RwLock<Box<str>>>, pattern: Arc<RwLock<Box<str>>>, replace: Arc<RwLock<Box<str>>>)->Result<Box<str>, regex::Error>{
+                        let regex = Regex::new(&pattern.read().unwrap())?;
+                        Ok(regex.replace_all(&input.read().unwrap(), &**replace.read().unwrap()).into_owned().into_boxed_str())
+                    }
+                    replace::new()
+                }),
+            },
         },
         collections: map! {
             list: map! {
