@@ -221,7 +221,7 @@ pub fn hir_to_lir(statements: Vec<HIRStatement<(Uuid, HIRType)>>, argument_count
                             for item in items.into_iter().rev() {
                                 push_variable(item, result);
                             }
-                            result.push(LIRInstruction::ConstructTuple(len).into());
+                            result.push(LIRInstruction::ConstructArray(len).into());
                         }
                     }
                     result.push(LIRInstruction::Store(variable_id).into());
