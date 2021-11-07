@@ -1112,11 +1112,13 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                     return Ok((reachable, condition));
                 }
                 let mut then_statements = Vec::new();
-                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, variables, variable_sequence, imports, generics_argument_names)?;
+                let mut then_variables = variables.clone();
+                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, &mut then_variables, variable_sequence, imports, generics_argument_names)?;
                 let then = (then_statements, then_result);
                 let other = if let Some(other) = other {
                     let mut other_statements = Vec::new();
-                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, variables, variable_sequence, imports, generics_argument_names)?;
+                    let mut other_variables = variables.clone();
+                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, &mut other_variables, variable_sequence, imports, generics_argument_names)?;
                     reachable.combine(other_reachable);
                     (other_statements, other_result)
                 } else {
@@ -1149,12 +1151,14 @@ fn push_expression(Expression { expression, .. }: Expression, result: &mut Vec<H
                 *variable_sequence += 1;
                 let pattern_type = apply_generics_type_argument(type_hint.map_or_else(|| HIRType::try_from(&pattern), HIRType::try_from)?, generics_argument_names);
                 let mut then_statements = Vec::new();
-                push_deconstruct_pattern(pattern, Variable::Unnamed(condition_binding), &mut then_statements, variables, variable_sequence, imports)?;
-                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, variables, variable_sequence, imports, generics_argument_names)?;
+                let mut then_variables = variables.clone();
+                push_deconstruct_pattern(pattern, Variable::Unnamed(condition_binding), &mut then_statements, &mut then_variables, variable_sequence, imports)?;
+                let (mut reachable, then_result) = push_expression(*then, &mut then_statements, &mut then_variables, variable_sequence, imports, generics_argument_names)?;
                 let then = (then_statements, then_result);
                 let other = if let Some(other) = other {
                     let mut other_statements = Vec::new();
-                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, variables, variable_sequence, imports, generics_argument_names)?;
+                    let mut other_variables = variables.clone();
+                    let (other_reachable, other_result) = push_expression(*other, &mut other_statements, &mut other_variables, variable_sequence, imports, generics_argument_names)?;
                     reachable.combine(other_reachable);
                     (other_statements, other_result)
                 } else {
