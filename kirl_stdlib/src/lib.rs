@@ -224,6 +224,7 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
             _eq: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool, b: bool| Ok::<_, NoneError>(a == b))),
             true: FunctionOrChildren::static_value(||true),
             false: FunctionOrChildren::static_value(||false),
+            to_string: FunctionOrChildren::from_function(FunctionWrapper::from(|a: bool| Ok::<_, NoneError>(a.to_string().into_boxed_str()))),
         },
         num: map! {
             _add: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a + b))),
@@ -234,6 +235,7 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
             _eq: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a == b))),
             _gt: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128, b: Decimal128| Ok::<_, NoneError>(a > b))),
             _neg: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128| Ok::<_, NoneError>(-a))),
+            to_string: FunctionOrChildren::from_function(FunctionWrapper::from(|a: Decimal128| Ok::<_, NoneError>(a.to_standard_notation_string().into_boxed_str()))),
         },
         string: map! {
             _eq: FunctionOrChildren::from_function({
