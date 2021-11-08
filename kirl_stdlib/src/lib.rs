@@ -1,3 +1,4 @@
+use kirl_common::dec;
 use kirl_common::dec::Decimal128;
 use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValue, KirlVMValueLock};
 use kirl_common::typing::HIRType;
@@ -133,11 +134,11 @@ impl<'a> Iterator for KirlStdLibStaticValues<'a> {
 }
 
 impl KirlStdLib {
-    pub fn functions(&self) -> impl IntoIterator<Item = (Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
+    pub fn functions(&self) -> impl IntoIterator<Item=(Uuid, Arc<Mutex<dyn KirlRustFunction>>)> + '_ {
         KirlStdLibFunctions { functions: Vec::new(), maps: vec![&self.0] }
     }
 
-    pub fn static_values(&self) -> impl IntoIterator<Item = (Uuid, Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>)> + '_ {
+    pub fn static_values(&self) -> impl IntoIterator<Item=(Uuid, Arc<dyn Fn() -> Arc<dyn KirlVMValueLock>>)> + '_ {
         KirlStdLibStaticValues { values: Vec::new(), maps: vec![&self.0] }
     }
 }
@@ -300,6 +301,20 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
                         list.write().unwrap().push(item);
                     }
                     FunctionOrChildren::from_function(list_push::new())
+                },
+                insert: {
+                    #[kirl_function(for<T> ([T], Number, T)->() )]
+                    fn list_insert(list: Arc<RwLock<Vec<Arc<dyn KirlVMValueLock>>>>, index: Decimal128, item: Arc<dyn KirlVMValueLock>) {
+                        list.write().unwrap().insert(usize::try_from(dec::Decimal::<15>::from(index)).unwrap(), item);
+                    }
+                    FunctionOrChildren::from_function(list_insert::new())
+                },
+                remove: {
+                    #[kirl_function(for<T> ([T], Number)->() )]
+                    fn list_remove(list: Arc<RwLock<Vec<Arc<dyn KirlVMValueLock>>>>, index: Decimal128) {
+                        list.write().unwrap().remove(usize::try_from(dec::Decimal::<15>::from(index)).unwrap());
+                    }
+                    FunctionOrChildren::from_function(list_remove::new())
                 },
                 _get_item: {
                     #[kirl_function(for<T> ([T], Number)->T )]
