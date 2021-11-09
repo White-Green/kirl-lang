@@ -1,29 +1,28 @@
-[日本語版はこちら](./README_JA.md)
-
+[English version is here](./README_EN.md)
 # kirl-lang
-An experimental project for statically typed scripting language.
+静的型付けされたスクリプト言語の実験的プロジェクト
 
-## required for running
-[Rust toolchain](https://www.rust-lang.org) for your computer
+## 実行環境
+[Rustツールチェイン](https://www.rust-lang.org) をインストールしてください
 
-## install
+## インストール方法
 ```shell
 $ cargo install --git https://github.com/White-Green/kirl-lang
 ```
-or
+または
 ```shell
 $ git clone https://github.com/White-Green/kirl-lang
 $ cargo install kirl-lang/kirl
 ```
 
-## running
-create below file named "hello.kirl".
+## 実行
+以下の内容のファイルを"hello.kirl"という名前で作成します
 ```
 import std::io;
 
 "Hello, World!".io::println();
 ```
-and run this file by the below command.
+その後、以下のコマンドで実行します
 ```shell
 $ kirl hello.kirl
 ```
