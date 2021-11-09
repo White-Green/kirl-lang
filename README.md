@@ -1,5 +1,7 @@
+[日本語版はこちら](./README_JA.md)
+
 # kirl-lang
-An experimental project for static-typed script programming language.
+An experimental project for statically typed scripting language.
 
 ## required for running
 [Rust toolchain](https://www.rust-lang.org) for your computer
