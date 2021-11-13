@@ -108,6 +108,8 @@ pub enum Token {
     WaveBracketClose(Range<CharacterPosition>),
     /// ->
     FunctionArrow(Range<CharacterPosition>),
+    /// |->
+    MapsTo(Range<CharacterPosition>),
     /// =>
     MatchArrow(Range<CharacterPosition>),
 }
@@ -162,6 +164,7 @@ impl Token {
             Token::WaveBracketOpen(range) => range,
             Token::WaveBracketClose(range) => range,
             Token::FunctionArrow(range) => range,
+            Token::MapsTo(range) => range,
             Token::MatchArrow(range) => range,
         }
     }
@@ -268,6 +271,7 @@ tokenizer! {
         "\\{": |_, v| Ok(array![Token::WaveBracketOpen(v.first().unwrap().0..v.last().unwrap().0.next())]);
         "\\}": |_, v| Ok(array![Token::WaveBracketClose(v.first().unwrap().0..v.last().unwrap().0.next())]);
         "->": |_, v| Ok(array![Token::FunctionArrow(v.first().unwrap().0..v.last().unwrap().0.next())]);
+        "\\|->": |_, v| Ok(array![Token::MapsTo(v.first().unwrap().0..v.last().unwrap().0.next())]);
         "=>": |_, v| Ok(array![Token::MatchArrow(v.first().unwrap().0..v.last().unwrap().0.next())]);
         ".|\n": |_, v| Err(TokenizeError::UnknownCharacter { character: v.first().unwrap().1, position: v.first().unwrap().0 });
     }
