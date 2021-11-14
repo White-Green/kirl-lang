@@ -1,10 +1,11 @@
-use kirl_common::dec;
 use kirl_common::dec::Decimal128;
-use kirl_common::interface::{FunctionWrapper, KirlRustFunction, KirlVMValue, KirlVMValueLock};
-use kirl_common::typing::HIRType;
+use kirl_common::interface::{FunctionWrapper, InterchangeKirlVMValue, KirlRustFunction, KirlVMValue, KirlVMValueLock};
+use kirl_common::typing::{HIRType, LIRType};
+use kirl_common::{dec, get_type};
 use kirl_common_macro::kirl_function;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
@@ -329,7 +330,66 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
                         list.write().unwrap()[usize::try_from(dec::Decimal::<15>::from(index)).unwrap()] = item;
                     }
                     FunctionOrChildren::from_function(list_set_item::new())
+                },
+                _iterator: {
+                    #[kirl_function(for<T> ([T])->std::iter::Iterator::<T>)]
+                    fn list_iterator(list: Vec<Arc<dyn KirlVMValueLock>>) -> IteratorWrapper {
+                        IteratorWrapper::new_kirl_value(list.into_iter(), get_type!((std::iter::Iterator::<(Number)>)))
+                    }
+                    FunctionOrChildren::from_function(list_iterator::new())
                 }
+            },
+        },
+        iter: map! {
+            range: {
+                #[kirl_function((Number)->std::iter::Iterator::<Number>)]
+                fn range(stop: Decimal128) -> IteratorWrapper {
+                    let step = Decimal128::from(1);
+                    let iter = std::iter::successors(Some(Decimal128::from(0)), move |&i| Some(i + step)).take_while(move |i| i < &stop);
+                    IteratorWrapper::new(iter, get_type!((std::iter::Iterator::<(Number)>)))
+                }
+                FunctionOrChildren::from_function(range::new())
+            },
+            range: {
+                #[kirl_function((Number, Number)->std::iter::Iterator::<Number>)]
+                fn range(start: Decimal128, stop: Decimal128) -> IteratorWrapper {
+                    let step = Decimal128::from(1);
+                    let iter = std::iter::successors(Some(start), move |&i| Some(i + step)).take_while(move |i| i < &stop);
+                    IteratorWrapper::new(iter, get_type!((std::iter::Iterator::<(Number)>)))
+                }
+                FunctionOrChildren::from_function(range::new())
+            },
+            range: {
+                #[kirl_function((Number, Number, Number)->std::iter::Iterator::<Number>)]
+                fn range(start: Decimal128, stop: Decimal128, step: Decimal128) -> IteratorWrapper {
+                    let iter = std::iter::successors(Some(start), move |&i| Some(i + step)).take_while(move |i| i < &stop);
+                    IteratorWrapper::new(iter, get_type!((std::iter::Iterator::<(Number)>)))
+                }
+                FunctionOrChildren::from_function(range::new())
+            },
+            _iterator: {
+                #[kirl_function(for<T> (std::iter::Iterator::<T>)->std::iter::Iterator::<T> )]
+                fn iterator_into_iterator(iter: Arc<dyn KirlVMValueLock>) -> Arc<dyn KirlVMValueLock> {
+                    iter
+                }
+                FunctionOrChildren::from_function(iterator_into_iterator::new())
+            },
+            _next: {
+                #[kirl_function(for<T> (std::iter::Iterator::<T>)->(() | #{ value: T }))]
+                fn iterator_into_iterator(iter: Arc<RwLock<IteratorWrapper>>) -> Arc<dyn KirlVMValueLock> {
+                    match iter.write().unwrap().iter.next() {
+                        Some(value) => {
+                            let map = {
+                                let mut map = HashMap::new();
+                                map.insert("value".to_string(), value);
+                                map
+                            };
+                            map.into_kirl_value()
+                        },
+                        None => ().into_kirl_value()
+                    }
+                }
+                FunctionOrChildren::from_function(iterator_into_iterator::new())
             },
         },
     })
@@ -337,4 +397,52 @@ static STDLIB: Lazy<KirlStdLib> = Lazy::new(|| {
 
 pub fn get_stdlib() -> &'static KirlStdLib {
     &*STDLIB
+}
+
+struct IteratorWrapper {
+    iter: Box<dyn Iterator<Item = Arc<dyn KirlVMValueLock>> + Send + Sync>,
+    iter_type: LIRType,
+}
+
+impl Debug for IteratorWrapper {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IteratorWrapper").field("iter", &"emitted").field("iter_type", &self.iter_type).finish()
+    }
+}
+
+impl IteratorWrapper {
+    fn new<I: Iterator + Send + Sync + 'static>(iter: I, item_type: LIRType) -> Self
+    where
+        I::Item: InterchangeKirlVMValue,
+    {
+        let iter = Box::new(iter.map(InterchangeKirlVMValue::into_kirl_value));
+        let iter_type = LIRType::Named {
+            path: vec!["std".to_string(), "iter".to_string(), "Iterator".to_string()],
+            generics_arguments: vec![item_type],
+        };
+        IteratorWrapper { iter, iter_type }
+    }
+
+    fn new_kirl_value<I: Iterator<Item = Arc<dyn KirlVMValueLock>> + Send + Sync + 'static>(iter: I, item_type: LIRType) -> Self {
+        let iter = Box::new(iter);
+        let iter_type = LIRType::Named {
+            path: vec!["std".to_string(), "iter".to_string(), "Iterator".to_string()],
+            generics_arguments: vec![item_type],
+        };
+        IteratorWrapper { iter, iter_type }
+    }
+}
+
+impl KirlVMValue for IteratorWrapper {
+    fn static_type() -> Cow<'static, LIRType>
+    where
+        Self: Sized,
+    {
+        static TYPE: Lazy<LIRType> = Lazy::new(|| get_type!((std::iter::Iterator::<()>)).into_normalized());
+        Cow::Borrowed(&*TYPE)
+    }
+
+    fn get_type(&self) -> Cow<LIRType> {
+        Cow::Borrowed(&self.iter_type)
+    }
 }

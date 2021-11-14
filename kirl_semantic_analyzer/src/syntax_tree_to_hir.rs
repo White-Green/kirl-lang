@@ -271,7 +271,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
             let condition = Variable::Unnamed(*variable_sequence);
             *variable_sequence += 1;
             body.push(HIRStatement::Binding {
-                variable_id: *variable_sequence + 2,
+                variable_id: *variable_sequence + 3,
                 variable_type: HIRType::Infer,
                 expression: HIRExpression::IfLet {
                     condition_binding: *variable_sequence,
@@ -286,7 +286,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                                 member: "value".to_string(),
                             },
                         }],
-                        Variable::Unnamed(*variable_sequence),
+                        Variable::Unnamed(*variable_sequence + 1),
                     ),
                     other: (
                         vec![
@@ -302,7 +302,7 @@ fn push_statement(Statement { statement, .. }: Statement, result: &mut Vec<HIRSt
                 },
             });
             let iterator_variable = Variable::Unnamed(*variable_sequence + 3);
-            *variable_sequence += 3;
+            *variable_sequence += 4;
             push_deconstruct_pattern(pattern, iterator_variable, &mut body, &mut variables, variable_sequence, &mut imports)?;
             for stmt in statements {
                 let reachable = push_statement(stmt, &mut body, &mut variables, variable_sequence, &mut imports, generics_argument_names)?;

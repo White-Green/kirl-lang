@@ -80,6 +80,7 @@ impl_fn!(A1, A2, A3);
 impl_fn!(A1, A2, A3, A4);
 impl_fn!(A1, A2, A3, A4, A5);
 
+#[macro_export]
 macro_rules! get_type {
     (!)=>{ kirl_common::typing::LIRType::Unreachable };
     (($($id:ident)::+ $(::<$($ty:tt),*>)?))=>{ $crate::typing::LIRType::Named{path:vec![$(std::string::String::from(stringify!($id))),+], generics_arguments: vec![$($(get_type!($ty)),*)?]} };

@@ -36,7 +36,10 @@ impl TypeWithGenerics {
                                 }
                             }
                         }
-                        HIRType::Named { path, generics_arguments }
+                        HIRType::Named {
+                            path,
+                            generics_arguments: generics_arguments.into_iter().map(|ty| expand_generics_inner(ty, map)).collect(),
+                        }
                     }
                     HIRType::Tuple(items) => HIRType::Tuple(items.into_iter().map(|ty| expand_generics_inner(ty, map)).collect()),
                     HIRType::Array(item) => HIRType::Array(Box::new(expand_generics_inner(*item, map))),
@@ -254,7 +257,7 @@ fn quote_type(ty: &HIRType) -> proc_macro2::TokenStream {
                 let v = quote_type(v);
                 quote! { (#k.to_string(), #v) }
             });
-            quote! { kirl_common::typing::HIRType::AnonymousStruct(BTreeMap::from([#(#members),*])) }
+            quote! { kirl_common::typing::HIRType::AnonymousStruct(std::collections::BTreeMap::from([#(#members),*])) }
         }
         HIRType::Or(items) => {
             let items = items.iter().map(|ty| quote_type(ty));

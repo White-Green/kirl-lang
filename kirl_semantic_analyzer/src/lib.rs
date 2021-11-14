@@ -273,7 +273,7 @@ where
             HIRStatement::Binding { variable_id, variable_type, expression } => {
                 format!("let ${}: {} = {};", variable_id, ToString::to_string(variable_type), ToString::to_string(expression))
             }
-            HIRStatement::Unreachable => "unreachable".to_string(),
+            HIRStatement::Unreachable => "$unreachable".to_string(),
             HIRStatement::Return(variable) => {
                 format!("return {};", ToString::to_string(variable))
             }
@@ -813,7 +813,7 @@ mod tests {
                     },
                 },
                 HIRStatement::Binding {
-                    variable_id: 23,
+                    variable_id: 24,
                     variable_type: HIRType::Tuple(vec![]),
                     expression: HIRExpression::Loop(vec![
                         HIRStatement::Binding {
@@ -895,7 +895,7 @@ mod tests {
                             },
                         },
                         HIRStatement::Binding {
-                            variable_id: 22,
+                            variable_id: 23,
                             variable_type: HIRType::Tuple(vec![]),
                             expression: HIRExpression::Loop(vec![
                                 HIRStatement::Binding {
@@ -907,7 +907,7 @@ mod tests {
                                     },
                                 },
                                 HIRStatement::Binding {
-                                    variable_id: 20,
+                                    variable_id: 21,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::IfLet {
                                         condition_binding: 18,
@@ -919,7 +919,7 @@ mod tests {
                                                 variable_type: HIRType::Infer,
                                                 expression: HIRExpression::AccessMember { variable: Variable::Unnamed(18), member: "value".to_string() },
                                             }],
-                                            Variable::Unnamed(18)
+                                            Variable::Unnamed(19)
                                         ),
                                         other: (
                                             vec![
@@ -935,7 +935,7 @@ mod tests {
                                     },
                                 },
                                 HIRStatement::Binding {
-                                    variable_id: 21,
+                                    variable_id: 22,
                                     variable_type: HIRType::Infer,
                                     expression: HIRExpression::CallFunction {
                                         function: Variable::Named(
