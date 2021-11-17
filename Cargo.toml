@@ -12,3 +12,6 @@ members = [
 
 [profile.dev]
 opt-level = 3
+
+[profile.dev.build-override]
+opt-level = 3
