@@ -129,9 +129,9 @@ pub fn exec(
                 let mut result = HashMap::with_capacity(operand as usize);
                 for _ in 0..operand {
                     let name = local_stack.pop().expect("");
-                    let name = unwrap(<Box<str>>::try_from_kirl_value(name).expect(""));
+                    let name = unwrap(String::try_from_kirl_value(name).expect(""));
                     let value = local_stack.pop().expect("");
-                    result.insert(name.into_string(), value);
+                    result.insert(name, value);
                 }
                 local_stack.push(Arc::new(RwLock::new(result)));
             }

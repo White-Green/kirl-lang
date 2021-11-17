@@ -137,7 +137,7 @@ fn lir_to_bytecode(lir: impl IntoIterator<Item = LIRStatement>, member_name_map:
         match instruction {
             LIRInstruction::LoadImmediateString(value) => {
                 result.push(KirlByteCode::new(KirlByteCodeOpcode::LoadStaticValue, static_value_generators.len() as u32));
-                let value = Arc::new(RwLock::new(value.into_boxed_str())) as Arc<dyn KirlVMValueLock>;
+                let value = Arc::new(RwLock::new(value)) as Arc<dyn KirlVMValueLock>;
                 static_value_generators.push(Arc::new(move || Arc::clone(&value)));
             }
             LIRInstruction::LoadImmediateNumber(value) => {
